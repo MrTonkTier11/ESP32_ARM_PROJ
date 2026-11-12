@@ -38,7 +38,7 @@ An advanced 4-DOF robotic arm controller supporting **USB Serial**, **Wi-Fi Hots
 | **Shoulder** | SG90 | Positional (180°) | `GPIO 4` | 0° – 180° (Center: 90°) |
 | **Elbow** | SG90 | Positional (180°) | `GPIO 18` | 0° – 180° (Center: 90°) |
 | **Claw / Gripper** | SG90 | Positional (180°) | `GPIO 19` | 0° – 180° (Open: ~30°, Grip: ~150°) |
-| **Base Rotation** | MG90S | Continuous (360°) | `GPIO 21` | Timed tracking (Stop: 1500µs) |
+| **Base Rotation** | MG90S | Continuous (360°) | `GPIO 21` | Timed tracking (Stop: 1500µs; CW: 1700µs; CCW: 1300µs) |
 
 ---
 
@@ -83,3 +83,7 @@ To compile and upload using PlatformIO:
 pio run --target upload
 ```
 Partition table is configured as `huge_app.csv` (3 MB app space) to comfortably hold Wi-Fi SoftAP, Web Server, TCP Server, and Bluetooth simultaneously.
+
+### Base-servo calibration
+
+The base is a continuous-rotation servo, so its position is estimated from run time rather than measured with feedback. If the servo creeps while stopped, adjust `BASE_STOP_US` in `src/main.cpp` by small increments (typically 5–10 µs). If it does not start reliably, adjust `BASE_CW_US` and `BASE_CCW_US` farther from the stop value. The base wiring in this project is GPIO 21.

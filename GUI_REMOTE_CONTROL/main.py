@@ -80,7 +80,7 @@ class ConnectionManager:
             self.mode = self.MODE_SERIAL
             self.is_connected = True
             self.running = True
-            
+
             # Start background reader
             self.rx_thread = threading.Thread(target=self._serial_read_loop, daemon=True)
             self.rx_thread.start()
@@ -410,7 +410,9 @@ class RoboticArmApp:
                     self.root.after(0, lambda: self.btn_connect.config(text="DISCONNECT", bg=COLOR_RED, state="normal"))
                 except Exception as e:
                     self.root.after(0, lambda: self.btn_connect.config(text="CONNECT", bg="#00b0ff", state="normal"))
-                    self.root.after(0, lambda: messagebox.showerror("Connection Error", f"Failed to connect:\n{e}"))
+                    self.root.after(0, lambda err=e: messagebox.showerror(
+                        "Connection Error", f"Failed to connect:\n{err}", parent=self.root
+                    ))
 
             threading.Thread(target=connect_task, daemon=True).start()
 

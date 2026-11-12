@@ -65,10 +65,13 @@ int pos3 = 90; // Claw
 // MG90S CONTINUOUS ROTATION SETTINGS
 // =====================================
 
+// Continuous-rotation servos use pulse width as speed/direction, not angle.
+// Tune BASE_STOP_US for the exact servo so the horn is stationary at idle.
 const int BASE_STOP_US = 1500;
-const int BASE_CW_US = 1650;
-const int BASE_CCW_US = 1350;
-const float BASE_MS_PER_DEG = 10.0f;
+const int BASE_CW_US = 1700;
+const int BASE_CCW_US = 1300;
+const float BASE_MS_PER_DEG = 12.0f;
+const float BASE_ESTIMATE_PERIOD_DEG = 360.0f;
 
 float basePosition = 90.0f;
 float baseTarget = 90.0f;
@@ -721,6 +724,8 @@ void stopBase() {
     servo4.writeMicroseconds(BASE_STOP_US);
     baseDirection = 0;
     baseManualJog = false;
+    // Keep the UI's virtual target in its documented 0..180° range.
+    baseTarget = constrain(basePosition, 0.0f, 180.0f);
 }
 
 // =====================================
@@ -745,16 +750,16 @@ void updateBase() {
 
     if (baseManualJog) {
         // Continuous manual jog
-        float movement = elapsed / BASE_MS_PER_DEG;
+        float movement = (float)elapsed / BASE_MS_PER_DEG;
         basePosition += baseDirection * movement;
-        basePosition = constrain(basePosition, 0.0f, 180.0f);
-        baseTarget = basePosition;
+        while (basePosition >= BASE_ESTIMATE_PERIOD_DEG) basePosition -= BASE_ESTIMATE_PERIOD_DEG;
+        while (basePosition < 0.0f) basePosition += BASE_ESTIMATE_PERIOD_DEG;
         return;
     }
 
     // Estimated movement toward target
     if (baseDirection != 0) {
-        float movement = elapsed / BASE_MS_PER_DEG;
+        float movement = (float)elapsed / BASE_MS_PER_DEG;
         basePosition += baseDirection * movement;
 
         if (baseDirection > 0) {
@@ -812,7 +817,6 @@ void processCommand(const char *command, Stream *replyStream) {
     if (strcmp(command, "STOP4") == 0 || strcmp(command, "STOP") == 0) {
         updateBase();
         stopBase();
-        baseTarget = basePosition;
         if (replyStream) replyStream->println("BASE STOPPED");
         return;
     }
@@ -943,7 +947,6 @@ void handleApiStatus() {
 void handleApiStop() {
     updateBase();
     stopBase();
-    baseTarget = basePosition;
     webServer.send(200, "application/json", "{\"status\":\"stopped\"}");
 }
 
@@ -1089,7 +1092,6 @@ void loop() {
     if (!tcpClient.connected()) {
         if (tcpClient) {
             stopBase();
-            baseTarget = basePosition;
             tcpClient.stop();
             Serial.println("[TCP] Client disconnected");
         }
