@@ -14,8 +14,8 @@ from status_bar import StatusBar
 
 
 class RoboticArmApp:
-    REST_POSE = (45, 135, 90, 90)      # shoulder, elbow, claw, base
-    CENTER_POSE = (90, 90, 90, 90)
+    REST_POSE = (45, 135, 90, 180)      # shoulder, elbow, claw, base
+    CENTER_POSE = tuple(ArmState.DEFAULTS[j]for j in ArmState.JOINTS)
     SEND_DEBOUNCE_MS = 35
 
     def __init__(self, root):
@@ -96,7 +96,7 @@ class RoboticArmApp:
     def sync_initial_positions(self):
         """Sends current GUI slider values to ESP32 upon connection."""
         for j in ArmState.JOINTS:
-            self.comm.send(f"S{j},{self.state.get(j)}")
+            self.comm.send(f"S{j},{self.state.to_servo(j, self.state.get)}")
 
     def on_slider_moved(self, joint_id, value):
         if self._suppress:
@@ -116,7 +116,7 @@ class RoboticArmApp:
         self.set_joint_val(joint_id, self.state.get(joint_id) + delta)
 
     def set_joint_val(self, joint_id, value):
-        value = self.state.clamp(value)
+        value = self.state.clamp(joint_id, value)
 
         # Cancel any pending debounced send so the command is not sent twice
         if joint_id in self.pending_timers:
@@ -134,7 +134,7 @@ class RoboticArmApp:
 
     def send_joint_command(self, joint_id, value):
         self.pending_timers.pop(joint_id, None)
-        self.comm.send(f"S{joint_id},{value}")
+        self.comm.send(f"S{joint_id},{slf.state.to_servo(joint_id, value)}")
 
     def stop_base(self):
         self.comm.send("STOP4")

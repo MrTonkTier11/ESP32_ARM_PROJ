@@ -9,7 +9,8 @@ class JointCard(tk.Frame):
     def __init__(self, parent, joint_id, variable, title, subtitle,
                  left_text, right_text,
                  on_slider, on_step, on_set,
-                 on_stop_base=None,
+                 on_stop_base=None, min_val =0, max_val=180,
+                 open_value=30, grip_value=150,
                  show_angle=True, has_stop_base=False, has_claw_actions=False):
         super().__init__(parent, bg=CARD_BG, highlightbackground=CARD_BORDER,
                          highlightthickness=1, padx=12, pady=8)
@@ -19,6 +20,10 @@ class JointCard(tk.Frame):
         self.on_step = on_step          # (joint_id, delta)
         self.on_set = on_set            # (joint_id, value)
         self.on_stop_base = on_stop_base
+        self.min_val = min_val
+        self.open_value =open_value
+        self.grip_value = grip_value
+        self.max_val = max_val
         self.badge = None
 
         self._build_header(title, show_angle)
@@ -59,7 +64,7 @@ class JointCard(tk.Frame):
         ).pack(side="left", padx=(0, 6))
 
         tk.Scale(
-            row, from_=0, to=180, orient="horizontal",
+            row, from_=self.min_val, to=self.max_val, orient="horizontal",
             variable=self.var, showvalue=0,
             command=lambda val: self.on_slider(self.joint_id, val),
             bg=CARD_BG, troughcolor=SLIDER_TROUGH, highlightthickness=0,
@@ -94,15 +99,15 @@ class JointCard(tk.Frame):
 
         if has_claw_actions:
             tk.Button(
-                row, text="🔓 FULL OPEN (30°)", font=("Segoe UI", 8, "bold"),
+                row, text="🔓 FULL OPEN ", font=("Segoe UI", 8, "bold"),
                 bg="#11334c", fg="#64b5f6", activebackground="#0091ea", activeforeground="#fff",
                 bd=0, padx=8, pady=2, cursor="hand2",
-                command=lambda: self.on_set(self.joint_id, 30),
+                command=lambda: self.on_set(self.joint_id, self.open_value),
             ).pack(side="right", padx=2)
 
             tk.Button(
-                row, text="🔒 FULL GRIP (150°)", font=("Segoe UI", 8, "bold"),
+                row, text="🔒 FULL GRIP", font=("Segoe UI", 8, "bold"),
                 bg="#3d2a0e", fg="#ffca28", activebackground="#ff8f00", activeforeground="#fff",
                 bd=0, padx=8, pady=2, cursor="hand2",
-                command=lambda: self.on_set(self.joint_id, 150),
+                command=lambda: self.on_set(self.joint_id, self.grip_value),
             ).pack(side="right", padx=2)
