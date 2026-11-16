@@ -1,0 +1,864 @@
+// ============================================================================
+// AUTO-GENERATED / EMBEDDED WEB ASSETS FOR ESP32 ROBOTIC ARM
+// ============================================================================
+// Contains PROGMEM fallbacks for index.html, style.css, and script.js.
+// These are served automatically if LittleFS is not mounted or the files
+// are not present on the flash filesystem.
+// ============================================================================
+
+#ifndef WEB_ASSETS_H
+#define WEB_ASSETS_H
+
+#include <Arduino.h>
+#include <pgmspace.h>
+
+static const char INDEX_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <title>ESP32 Robotic Arm Control</title>
+
+    <!-- External CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- HEADER -->
+    <header>
+        <h1>🤖 Robotic Arm</h1>
+    </header>
+
+    <!-- CONNECTION STATUS -->
+    <div class="status-bar">
+        <div class="badge">
+            <div class="indicator" id="status-dot"></div>
+            <span id="status-text">Connecting...</span>
+        </div>
+
+        <span class="ip-text" id="ip-text">192.168.4.1</span>
+    </div>
+
+    <!-- ROBOTIC ARM VISUALIZER -->
+    <div class="visualizer-card">
+        <div class="visualizer-title">
+            Live Joint Mimic Pose
+        </div>
+
+        <svg class="arm-svg" viewBox="0 0 320 160">
+            <defs>
+                <linearGradient id="armGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#00d9ff" />
+                    <stop offset="100%" stop-color="#0066ff" />
+                </linearGradient>
+            </defs>
+
+            <!-- BASE PLATFORM -->
+            <rect x="120" y="145" width="80" height="12" rx="4" fill="#23304c" stroke="#3b4d75" stroke-width="1.5" />
+            <circle cx="160" cy="145" r="14" fill="#151c2e" stroke="#00d9ff" stroke-width="2" />
+            <text x="160" y="149" fill="#00d9ff" font-size="8" font-weight="bold" text-anchor="middle" id="svg-base-text">90°</text>
+
+            <!-- SHOULDER GROUP -->
+            <g id="arm-shoulder-group" transform="translate(160, 145) rotate(0)">
+                <line x1="0" y1="0" x2="0" y2="-55" stroke="url(#armGrad)" stroke-width="7" stroke-linecap="round" />
+                <circle cx="0" cy="0" r="6" fill="#fff" stroke="#00d9ff" stroke-width="2" />
+
+                <!-- ELBOW GROUP -->
+                <g id="arm-elbow-group" transform="translate(0, -55) rotate(0)">
+                    <line x1="0" y1="0" x2="0" y2="-45" stroke="url(#armGrad)" stroke-width="5" stroke-linecap="round" />
+                    <circle cx="0" cy="0" r="5" fill="#fff" stroke="#0066ff" stroke-width="2" />
+
+                    <!-- CLAW GROUP -->
+                    <g id="arm-claw-group" transform="translate(0, -45)">
+                        <circle cx="0" cy="0" r="4" fill="#ffd54f" />
+                        <line id="svg-claw-l" x1="0" y1="0" x2="-10" y2="-14" stroke="#ffd54f" stroke-width="3" stroke-linecap="round" />
+                        <line id="svg-claw-r" x1="0" y1="0" x2="10" y2="-14" stroke="#ffd54f" stroke-width="3" stroke-linecap="round" />
+                    </g>
+                </g>
+            </g>
+        </svg>
+    </div>
+
+    <!-- JOINT 4: BASE ROTATION -->
+    <div class="joint-card">
+        <div class="joint-header">
+            <div>
+                <div class="joint-name">↺ BASE ROTATION</div>
+                <div class="joint-type">MG90S Continuous · Timed Tracking</div>
+            </div>
+            <div class="angle-badge" id="val4">90°</div>
+        </div>
+
+        <div class="control-row">
+            <button class="arrow-btn" onclick="stepServo(4, -5)" title="Rotate Counter-Clockwise">
+                <span>◀</span>
+                <span class="arrow-sub">CCW</span>
+            </button>
+
+            <div class="slider-container">
+                <input type="range" id="slider4" min="0" max="180" value="90" oninput="onSlider(4, this.value)">
+            </div>
+
+            <button class="arrow-btn" onclick="stepServo(4, 5)" title="Rotate Clockwise">
+                <span>▶</span>
+                <span class="arrow-sub">CW</span>
+            </button>
+        </div>
+
+        <div class="action-row">
+            <button class="btn-step" onclick="stepServo(4, -5)">-5°</button>
+            <button class="btn-step" onclick="stepServo(4, -1)">-1°</button>
+            <button class="btn-step" onclick="stepServo(4, 1)">+1°</button>
+            <button class="btn-step" onclick="stepServo(4, 5)">+5°</button>
+            <button class="btn-action btn-stop-base" onclick="stopBaseCmd()">⏹ STOP BASE</button>
+        </div>
+    </div>
+
+    <!-- JOINT 1: SHOULDER -->
+    <div class="joint-card">
+        <div class="joint-header">
+            <div>
+                <div class="joint-name">▲ SHOULDER JOINT</div>
+                <div class="joint-type">Servo 1 (SG90) · Main Arm Pitch</div>
+            </div>
+            <div class="angle-badge" id="val1">90°</div>
+        </div>
+
+        <div class="control-row">
+            <button class="arrow-btn" onclick="stepServo(1, -5)" title="Lower Arm">
+                <span>▼</span>
+                <span class="arrow-sub">DOWN</span>
+            </button>
+
+            <div class="slider-container">
+                <input type="range" id="slider1" min="0" max="180" value="90" oninput="onSlider(1, this.value)">
+            </div>
+
+            <button class="arrow-btn" onclick="stepServo(1, 5)" title="Raise Arm">
+                <span>▲</span>
+                <span class="arrow-sub">UP</span>
+            </button>
+        </div>
+
+        <div class="action-row">
+            <button class="btn-step" onclick="stepServo(1, -5)">-5°</button>
+            <button class="btn-step" onclick="stepServo(1, -1)">-1°</button>
+            <button class="btn-step" onclick="stepServo(1, 1)">+1°</button>
+            <button class="btn-step" onclick="stepServo(1, 5)">+5°</button>
+        </div>
+    </div>
+
+    <!-- JOINT 2: ELBOW -->
+    <div class="joint-card">
+        <div class="joint-header">
+            <div>
+                <div class="joint-name">↶ ELBOW JOINT</div>
+                <div class="joint-type">Servo 2 (SG90) · Forearm Pitch</div>
+            </div>
+            <div class="angle-badge" id="val2">90°</div>
+        </div>
+
+        <div class="control-row">
+            <button class="arrow-btn" onclick="stepServo(2, -5)" title="Retract Forearm">
+                <span>↶</span>
+                <span class="arrow-sub">BACK</span>
+            </button>
+
+            <div class="slider-container">
+                <input type="range" id="slider2" min="0" max="180" value="90" oninput="onSlider(2, this.value)">
+            </div>
+
+            <button class="arrow-btn" onclick="stepServo(2, 5)" title="Extend Forearm">
+                <span>↷</span>
+                <span class="arrow-sub">FWD</span>
+            </button>
+        </div>
+
+        <div class="action-row">
+            <button class="btn-step" onclick="stepServo(2, -5)">-5°</button>
+            <button class="btn-step" onclick="stepServo(2, -1)">-1°</button>
+            <button class="btn-step" onclick="stepServo(2, 1)">+1°</button>
+            <button class="btn-step" onclick="stepServo(2, 5)">+5°</button>
+        </div>
+    </div>
+
+    <!-- JOINT 3: CLAW -->
+    <div class="joint-card">
+        <div class="joint-header">
+            <div>
+                <div class="joint-name">🤏 CLAW / GRIPPER</div>
+                <div class="joint-type">Servo 3 (SG90) · Pincer Grip</div>
+            </div>
+            <div class="angle-badge" id="val3">90°</div>
+        </div>
+
+        <div class="control-row">
+            <button class="arrow-btn" onclick="stepServo(3, -5)" title="Open Claw">
+                <span>◄</span>
+                <span class="arrow-sub">OPEN</span>
+            </button>
+
+            <div class="slider-container">
+                <input type="range" id="slider3" min="0" max="180" value="90" oninput="onSlider(3, this.value)">
+            </div>
+
+            <button class="arrow-btn" onclick="stepServo(3, 5)" title="Grip / Close Claw">
+                <span>►</span>
+                <span class="arrow-sub">GRIP</span>
+            </button>
+        </div>
+
+        <div class="action-row">
+            <button class="btn-action btn-claw-open" onclick="setJoint(3, 30)">🔓 FULL OPEN</button>
+            <button class="btn-step" onclick="stepServo(3, -2)">-2°</button>
+            <button class="btn-step" onclick="stepServo(3, 2)">+2°</button>
+            <button class="btn-action btn-claw-grip" onclick="setJoint(3, 150)">🔒 FULL GRIP</button>
+        </div>
+    </div>
+
+    <!-- PRESETS -->
+    <div class="preset-panel">
+        <button class="btn-preset" onclick="applyPreset(90, 90, 90, 90)">🏠 HOME (90°)</button>
+        <button class="btn-preset" onclick="applyPreset(130, 45, 30, 90)">📦 PICK POSE</button>
+        <button class="btn-preset" onclick="applyPreset(70, 110, 150, 140)">📍 DROP POSE</button>
+        <button class="btn-preset" onclick="applyPreset(45, 135, 90, 90)">💤 REST / FOLD</button>
+    </div>
+
+    <!-- GLOBAL CONTROLS -->
+    <div class="global-controls">
+        <button class="btn-global btn-reset" onclick="resetAllCmd()">↺ RESET ALL</button>
+        <button class="btn-global btn-stop-all" onclick="stopBaseCmd()">⏹ STOP BASE</button>
+    </div>
+
+    <!-- External JavaScript -->
+    <script src="script.js"></script>
+
+</body>
+</html>)rawliteral";
+
+static const char STYLE_CSS[] PROGMEM = R"rawliteral(:root {
+    --bg: #0b0f19;
+    --card-bg: #151c2e;
+    --card-border: #23304c;
+    --accent: #00d9ff;
+    --accent-glow: rgba(0, 217, 255, 0.35);
+    --green: #00e676;
+    --red: #ff3d71;
+    --text: #ffffff;
+    --subtext: #8e9bb3;
+    --btn-bg: #1e2840;
+    --btn-active: #00d9ff;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+}
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+        Roboto, Helvetica, Arial, sans-serif;
+    padding: 12px;
+    padding-bottom: 30px;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+/* HEADER */
+header {
+    text-align: center;
+    padding: 10px 0 16px 0;
+}
+
+h1 {
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: var(--accent);
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+/* STATUS BAR */
+.status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 8px 14px;
+    font-size: 0.8rem;
+    margin-bottom: 12px;
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+}
+
+.indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.indicator.disconnected {
+    background: var(--red);
+    box-shadow: 0 0 8px var(--red);
+}
+
+.indicator.connecting {
+    background: #ffab00;
+    box-shadow: 0 0 8px #ffab00;
+}
+
+.ip-text {
+    color: var(--subtext);
+    font-size: 0.75rem;
+}
+
+/* VISUAL ARM CANVAS */
+.visualizer-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 12px;
+    margin-bottom: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.visualizer-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--subtext);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+}
+
+svg.arm-svg {
+    width: 100%;
+    max-width: 320px;
+    height: 160px;
+}
+
+/* JOINT CARD */
+.joint-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 14px;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.joint-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.joint-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.joint-type {
+    font-size: 0.7rem;
+    color: var(--subtext);
+    font-weight: 400;
+}
+
+.angle-badge {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #fff;
+    background: #0d1322;
+    padding: 2px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--card-border);
+    min-width: 54px;
+    text-align: center;
+}
+
+/* CONTROL ROW */
+.control-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 0;
+}
+
+.arrow-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--btn-bg);
+    border: 1px solid var(--card-border);
+    color: var(--text);
+    font-size: 1.25rem;
+    font-weight: bold;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.arrow-btn:active {
+    background: var(--accent);
+    color: #000;
+    transform: scale(0.92);
+    box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.arrow-sub {
+    font-size: 0.55rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-top: -2px;
+}
+
+.slider-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+/* RANGE SLIDERS */
+input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 10px;
+    border-radius: 5px;
+    background: #0d1322;
+    outline: none;
+    margin: 12px 0;
+}
+
+input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 0 10px var(--accent);
+    border: 2px solid #fff;
+}
+
+input[type=range]::-moz-range-thumb {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 0 10px var(--accent);
+    border: 2px solid #fff;
+}
+
+/* STEP & ACTION BUTTONS */
+.action-row {
+    display: flex;
+    gap: 6px;
+    justify-content: space-between;
+    margin-top: 6px;
+}
+
+.btn-step {
+    flex: 1;
+    padding: 6px 0;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: #101626;
+    border: 1px solid var(--card-border);
+    color: var(--subtext);
+    border-radius: 6px;
+    text-align: center;
+    cursor: pointer;
+}
+
+.btn-step:active {
+    background: var(--card-border);
+    color: #fff;
+}
+
+.btn-action {
+    flex: 1;
+    padding: 9px 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    text-align: center;
+    transition: transform 0.1s;
+}
+
+.btn-action:active {
+    transform: scale(0.95);
+}
+
+.btn-claw-open {
+    background: #194060;
+    color: #80d8ff;
+    border: 1px solid #0091ea;
+}
+
+.btn-claw-grip {
+    background: #4a2800;
+    color: #ffd54f;
+    border: 1px solid #ff9100;
+}
+
+.btn-stop-base {
+    background: #4a1220;
+    color: #ff8a80;
+    border: 1px solid var(--red);
+}
+
+/* GLOBAL CONTROL GRID */
+.global-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.btn-global {
+    padding: 12px;
+    font-size: 0.85rem;
+    font-weight: 800;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.btn-reset {
+    background: #1e2840;
+    color: var(--accent);
+    border: 1px solid var(--card-border);
+}
+
+.btn-stop-all {
+    background: var(--red);
+    color: #fff;
+}
+
+/* PRESET PANEL */
+.preset-panel {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.btn-preset {
+    flex: 1;
+    padding: 8px 4px;
+    background: #131a2b;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--subtext);
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+}
+
+.btn-preset:active {
+    background: var(--accent);
+    color: #000;
+}
+
+/* MOBILE RESPONSIVENESS */
+@media (max-width: 420px) {
+    .preset-panel {
+        flex-wrap: wrap;
+    }
+
+    .btn-preset {
+        flex: 1 1 45%;
+    }
+
+    .joint-name {
+        font-size: 0.85rem;
+    }
+
+    .angle-badge {
+        font-size: 1rem;
+    }
+
+    .action-row {
+        gap: 4px;
+    }
+
+    .btn-step {
+        font-size: 0.65rem;
+    }
+})rawliteral";
+
+static const char SCRIPT_JS[] PROGMEM = R"rawliteral(// ==========================================
+// ESP32 ROBOTIC ARM CONTROL
+// JavaScript Frontend Controller
+// ==========================================
+
+const state = {
+    1: 90, // Shoulder
+    2: 90, // Elbow
+    3: 90, // Claw
+    4: 90  // Base
+};
+
+let sendTimers = {};
+let isPolling = false;
+
+// ==========================================
+// CONNECTION STATUS HELPER
+// ==========================================
+
+function setConnected(connected, connecting = false) {
+    const dot = document.getElementById('status-dot');
+    const text = document.getElementById('status-text');
+    if (!dot || !text) return;
+
+    dot.classList.remove('disconnected', 'connecting');
+
+    if (connecting) {
+        dot.classList.add('connecting');
+        text.textContent = 'Connecting...';
+    } else if (connected) {
+        text.textContent = 'Connected (Wi-Fi AP)';
+    } else {
+        dot.classList.add('disconnected');
+        text.textContent = 'Disconnected / Offline';
+    }
+}
+
+// ==========================================
+// UPDATE ROBOTIC ARM VISUALIZER
+// ==========================================
+
+function updateVisualizer() {
+    // Shoulder rotation (matches Python 2D visualizer)
+    const sAngle = (state[1] - 90) * 0.8;
+
+    // Elbow rotation
+    const eAngle = (state[2] - 90) * 0.8;
+
+    // Claw opening / closing
+    const clawSpread = Math.max(2, Math.min(22, (180 - state[3]) * 0.12));
+
+    // Get SVG elements
+    const shoulderGroup = document.getElementById('arm-shoulder-group');
+    const elbowGroup = document.getElementById('arm-elbow-group');
+    const baseText = document.getElementById('svg-base-text');
+    const clawL = document.getElementById('svg-claw-l');
+    const clawR = document.getElementById('svg-claw-r');
+
+    // Update shoulder
+    if (shoulderGroup) {
+        shoulderGroup.setAttribute('transform', `translate(160, 145) rotate(${sAngle})`);
+    }
+
+    // Update elbow
+    if (elbowGroup) {
+        elbowGroup.setAttribute('transform', `translate(0, -55) rotate(${eAngle})`);
+    }
+
+    // Update base angle display
+    if (baseText) {
+        baseText.textContent = `${state[4]}°`;
+    }
+
+    // Update left claw pincer
+    if (clawL) {
+        clawL.setAttribute('x2', -clawSpread);
+        clawL.setAttribute('y2', -14);
+    }
+
+    // Update right claw pincer
+    if (clawR) {
+        clawR.setAttribute('x2', clawSpread);
+        clawR.setAttribute('y2', -14);
+    }
+}
+
+// ==========================================
+// SET SERVO POSITION
+// ==========================================
+
+function setJoint(servoId, value, sendToServer = true) {
+    // Restrict servo angle between 0 and 180
+    value = Math.max(0, Math.min(180, parseInt(value)));
+
+    // Update local servo state
+    state[servoId] = value;
+
+    // Get slider and angle badge
+    const slider = document.getElementById('slider' + servoId);
+    const valBadge = document.getElementById('val' + servoId);
+
+    // Update slider position
+    if (slider) {
+        slider.value = value;
+    }
+
+    // Update displayed angle
+    if (valBadge) {
+        valBadge.textContent = value + '°';
+    }
+
+    // Update SVG visualizer
+    updateVisualizer();
+
+    if (!sendToServer) {
+        return;
+    }
+
+    // Debounce HTTP requests (30ms)
+    clearTimeout(sendTimers[servoId]);
+    sendTimers[servoId] = setTimeout(() => {
+        fetch(`/api/set?s=${servoId}&v=${value}`)
+            .then(res => {
+                if (res.ok) setConnected(true);
+            })
+            .catch(e => {
+                console.warn('Fetch error:', e);
+                setConnected(false);
+            });
+    }, 30);
+}
+
+// ==========================================
+// SLIDER CONTROL
+// ==========================================
+
+function onSlider(servoId, value) {
+    setJoint(servoId, value, true);
+}
+
+// ==========================================
+// INCREMENT / DECREMENT CONTROL
+// ==========================================
+
+function stepServo(servoId, delta) {
+    setJoint(servoId, state[servoId] + delta, true);
+}
+
+// ==========================================
+// STOP BASE SERVO
+// ==========================================
+
+function stopBaseCmd() {
+    fetch('/api/stop')
+        .then(res => {
+            if (res.ok) setConnected(true);
+        })
+        .catch(e => {
+            console.warn(e);
+            setConnected(false);
+        });
+}
+
+// ==========================================
+// RESET ALL SERVOS
+// ==========================================
+
+function resetAllCmd() {
+    applyPreset(90, 90, 90, 90);
+
+    fetch('/api/reset')
+        .then(res => {
+            if (res.ok) setConnected(true);
+        })
+        .catch(e => {
+            console.warn(e);
+            setConnected(false);
+        });
+}
+
+// ==========================================
+// PRESET POSITIONS
+// ==========================================
+
+function applyPreset(s1, s2, s3, s4) {
+    setJoint(1, s1, true);
+    setJoint(2, s2, true);
+    setJoint(3, s3, true);
+    setJoint(4, s4, true);
+}
+
+// ==========================================
+// SERVO STATE SYNCHRONIZATION
+// ==========================================
+
+function syncStatus() {
+    if (isPolling) return;
+    isPolling = true;
+
+    fetch('/api/status')
+        .then(res => {
+            if (!res.ok) {
+                throw new Error('Status request failed');
+            }
+            return res.json();
+        })
+        .then(data => {
+            setConnected(true);
+
+            // Synchronize positions without echoing commands back
+            if (data.s1 !== undefined) setJoint(1, data.s1, false);
+            if (data.s2 !== undefined) setJoint(2, data.s2, false);
+            if (data.s3 !== undefined) setJoint(3, data.s3, false);
+            if (data.s4 !== undefined) setJoint(4, data.s4, false);
+        })
+        .catch(() => {
+            setConnected(false);
+            updateVisualizer();
+        })
+        .finally(() => {
+            isPolling = false;
+        });
+}
+
+// Initial synchronization and periodic poll (every 3 seconds)
+setConnected(false, true);
+syncStatus();
+setInterval(syncStatus, 3000);)rawliteral";
+
+#endif // WEB_ASSETS_H
