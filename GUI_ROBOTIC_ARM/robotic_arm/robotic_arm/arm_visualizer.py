@@ -36,7 +36,8 @@ class ArmVisualizer(tk.Canvas):
 
         shoulder_deg = (self.state.get(1) - 90) * 0.8
         elbow_deg = (self.state.get(2) - 90) * 0.8
-        claw_spread = max(3, min(24, (180 - self.state.get(3)) * 0.13))
+        claw_servo =self.state.to_servo(3, self.state.get(3))
+        claw_spread = max(3, min(24, (180 - claw_servo) * 0.13))
 
         # Base platform
         c.create_rectangle(bx - 55, by, bx + 55, by + 16, fill="#1c2538", outline="#2b3b59", width=2)
