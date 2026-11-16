@@ -147,10 +147,111 @@ function stepServo(servoId, delta) {
 }
 
 // ==========================================
+// BASE CONTINUOUS JOG & STEP CONTROLS
+// ==========================================
+
+let currentJogSpeed = 200;
+let jogKeepAliveTimer = null;
+let activeJogDir = 0;
+
+function setJogSpeed(spd) {
+    currentJogSpeed = spd;
+    ['spd-slow', 'spd-norm', 'spd-fast'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.classList.remove('active');
+    });
+
+    if (spd <= 140) {
+        document.getElementById('spd-slow')?.classList.add('active');
+    } else if (spd >= 300) {
+        document.getElementById('spd-fast')?.classList.add('active');
+    } else {
+        document.getElementById('spd-norm')?.classList.add('active');
+    }
+}
+
+function updateBaseBadge(text, isMoving = false) {
+    const badge = document.getElementById('val4');
+    if (!badge) return;
+    badge.textContent = text;
+    if (isMoving) {
+        badge.style.color = '#00d9ff';
+        badge.style.borderColor = '#00d9ff';
+    } else {
+        badge.style.color = '#fff';
+        badge.style.borderColor = 'var(--card-border)';
+    }
+}
+
+function startJog(dir) {
+    if (activeJogDir === dir) return;
+    activeJogDir = dir;
+
+    const dirStr = (dir > 0) ? 'CW' : 'CCW';
+    updateBaseBadge(dir > 0 ? 'ROTATING CW ▶' : '◀ ROTATING CCW', true);
+
+    const activeBtn = document.getElementById(dir > 0 ? 'btn-jog-cw' : 'btn-jog-ccw');
+    if (activeBtn) activeBtn.classList.add('active');
+
+    // Send initial jog command
+    fetch(`/api/jog?dir=${dirStr}&speed=${currentJogSpeed}`)
+        .then(res => { if (res.ok) setConnected(true); })
+        .catch(e => { console.warn(e); setConnected(false); });
+
+    // Send keepalive pulses every 500ms while button is held
+    clearInterval(jogKeepAliveTimer);
+    jogKeepAliveTimer = setInterval(() => {
+        if (activeJogDir !== 0) {
+            fetch(`/api/jog?dir=${dirStr}&speed=${currentJogSpeed}`).catch(() => {});
+        }
+    }, 500);
+}
+
+function stopJog() {
+    if (activeJogDir === 0 && !jogKeepAliveTimer) return;
+    activeJogDir = 0;
+    clearInterval(jogKeepAliveTimer);
+    jogKeepAliveTimer = null;
+
+    document.getElementById('btn-jog-cw')?.classList.remove('active');
+    document.getElementById('btn-jog-ccw')?.classList.remove('active');
+    updateBaseBadge('STOPPED', false);
+
+    fetch('/api/jog?dir=STOP')
+        .then(res => { if (res.ok) setConnected(true); })
+        .catch(e => { console.warn(e); setConnected(false); });
+}
+
+function nudgeBase(dir, ms) {
+    const dirStr = (dir > 0) ? 'CW' : 'CCW';
+    updateBaseBadge(dir > 0 ? `CW (${ms}ms) ▶` : `◀ CCW (${ms}ms)`, true);
+
+    fetch(`/api/step?dir=${dirStr}&ms=${ms}&speed=${currentJogSpeed}`)
+        .then(res => {
+            if (res.ok) setConnected(true);
+            setTimeout(() => {
+                if (activeJogDir === 0) updateBaseBadge('STOPPED', false);
+            }, ms + 50);
+        })
+        .catch(e => {
+            console.warn(e);
+            setConnected(false);
+            updateBaseBadge('STOPPED', false);
+        });
+}
+
+// ==========================================
 // STOP BASE SERVO
 // ==========================================
 
 function stopBaseCmd() {
+    activeJogDir = 0;
+    clearInterval(jogKeepAliveTimer);
+    jogKeepAliveTimer = null;
+    document.getElementById('btn-jog-cw')?.classList.remove('active');
+    document.getElementById('btn-jog-ccw')?.classList.remove('active');
+    updateBaseBadge('STOPPED', false);
+
     fetch('/api/stop')
         .then(res => {
             if (res.ok) setConnected(true);
@@ -171,6 +272,7 @@ function resetAllCmd() {
     fetch('/api/reset')
         .then(res => {
             if (res.ok) setConnected(true);
+            updateBaseBadge('STOPPED', false);
         })
         .catch(e => {
             console.warn(e);
@@ -186,7 +288,7 @@ function applyPreset(s1, s2, s3, s4) {
     setJoint(1, s1, true);
     setJoint(2, s2, true);
     setJoint(3, s3, true);
-    setJoint(4, s4, true);
+    stopJog();
 }
 
 // ==========================================
@@ -207,11 +309,17 @@ function syncStatus() {
         .then(data => {
             setConnected(true);
 
-            // Synchronize positions without echoing commands back
+            // Synchronize positional joints without echoing commands back
             if (data.s1 !== undefined) setJoint(1, data.s1, false);
             if (data.s2 !== undefined) setJoint(2, data.s2, false);
             if (data.s3 !== undefined) setJoint(3, data.s3, false);
-            if (data.s4 !== undefined) setJoint(4, data.s4, false);
+
+            // Synchronize continuous base state if not actively holding button
+            if (activeJogDir === 0 && data.baseState !== undefined) {
+                if (data.baseState === 1) updateBaseBadge('ROTATING CW ▶', true);
+                else if (data.baseState === -1) updateBaseBadge('◀ ROTATING CCW', true);
+                else updateBaseBadge('STOPPED', false);
+            }
         })
         .catch(() => {
             setConnected(false);

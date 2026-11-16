@@ -70,38 +70,48 @@
         </svg>
     </div>
 
-    <!-- JOINT 4: BASE ROTATION -->
+    <!-- JOINT 4: BASE ROTATION (360° CONTINUOUS JOG) -->
     <div class="joint-card">
         <div class="joint-header">
             <div>
                 <div class="joint-name">↺ BASE ROTATION</div>
-                <div class="joint-type">MG90S Continuous · Timed Tracking</div>
+                <div class="joint-type">MG90S 360° Continuous · GPIO 21</div>
             </div>
-            <div class="angle-badge" id="val4">90°</div>
+            <div class="angle-badge" id="val4" style="min-width: 80px; font-size: 0.9rem;">STOPPED</div>
         </div>
 
-        <div class="control-row">
-            <button class="arrow-btn" onclick="stepServo(4, -5)" title="Rotate Counter-Clockwise">
-                <span>◀</span>
-                <span class="arrow-sub">CCW</span>
+        <!-- CONTINUOUS JOG BUTTONS (HOLD TO ROTATE) -->
+        <div class="jog-row">
+            <button class="btn-jog" id="btn-jog-ccw"
+                onpointerdown="startJog(-1)" onpointerup="stopJog()" onpointerleave="stopJog()"
+                title="Hold to rotate Left">
+                <span>◀ ROTATE LEFT</span>
+                <span class="jog-sub">HOLD CCW</span>
             </button>
 
-            <div class="slider-container">
-                <input type="range" id="slider4" min="0" max="180" value="90" oninput="onSlider(4, this.value)">
-            </div>
-
-            <button class="arrow-btn" onclick="stepServo(4, 5)" title="Rotate Clockwise">
-                <span>▶</span>
-                <span class="arrow-sub">CW</span>
+            <button class="btn-jog" id="btn-jog-cw"
+                onpointerdown="startJog(1)" onpointerup="stopJog()" onpointerleave="stopJog()"
+                title="Hold to rotate Right">
+                <span>ROTATE RIGHT ▶</span>
+                <span class="jog-sub">HOLD CW</span>
             </button>
         </div>
 
+        <!-- FINE NUDGE / STEP BUTTONS -->
         <div class="action-row">
-            <button class="btn-step" onclick="stepServo(4, -5)">-5°</button>
-            <button class="btn-step" onclick="stepServo(4, -1)">-1°</button>
-            <button class="btn-step" onclick="stepServo(4, 1)">+1°</button>
-            <button class="btn-step" onclick="stepServo(4, 5)">+5°</button>
+            <button class="btn-step" onclick="nudgeBase(-1, 80)" title="Nudge CCW 80ms">◀ 80ms</button>
+            <button class="btn-step" onclick="nudgeBase(-1, 200)" title="Nudge CCW 200ms">◀ 200ms</button>
             <button class="btn-action btn-stop-base" onclick="stopBaseCmd()">⏹ STOP BASE</button>
+            <button class="btn-step" onclick="nudgeBase(1, 200)" title="Nudge CW 200ms">200ms ▶</button>
+            <button class="btn-step" onclick="nudgeBase(1, 80)" title="Nudge CW 80ms">80ms ▶</button>
+        </div>
+
+        <!-- SPEED SELECTION -->
+        <div class="speed-row">
+            <span class="speed-label">Speed:</span>
+            <button class="btn-speed" id="spd-slow" onclick="setJogSpeed(120)">Slow</button>
+            <button class="btn-speed active" id="spd-norm" onclick="setJogSpeed(200)">Normal</button>
+            <button class="btn-speed" id="spd-fast" onclick="setJogSpeed(320)">Fast</button>
         </div>
     </div>
 

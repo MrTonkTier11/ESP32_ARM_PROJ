@@ -8,8 +8,8 @@ from joint_card import JointCard
 class JointsPanel(tk.Frame):
     # Display order: Base, Shoulder, Elbow, Claw
     CARD_SPECS = [
-        dict(joint_id=4, title="BASE ROTATION (MG90S Continuous)",
-             subtitle="Timed Position Tracking & Continuous Yaw Rotation",
+        dict(joint_id=4, title="BASE ROTATION (MG90S 360° Continuous)",
+             subtitle="Directional Jog & Rotation Control",
              left_text="↺ ◀ CCW", right_text="CW ▶ ↻", has_stop_base=True),
         dict(joint_id=1, title="SHOULDER JOINT (SG90 180°)",
              subtitle="Main Arm Pitch Elevation",

@@ -14,7 +14,7 @@ An advanced 4-DOF robotic arm controller supporting **USB Serial**, **Wi-Fi Hots
    - **Bluetooth Classic SPP**: Wireless serial connection named `ESP32_RoboticArm`.
 
 2. **Intuitive Joint Mimic Controls & Directional Arrows**:
-   - **Joint 4: Base Rotation (MG90S Continuous)**: `↺ ◀ CCW` (Counter-Clockwise) & `CW ▶ ↻` (Clockwise), fine stepping (`-5°`, `-1°`, `+1°`, `+5°`), timed tracking, and instant `⏹ STOP BASE`.
+   - **Joint 4: Base Rotation (MG90S 360° Continuous)**: Hold-to-jog (`◀ ROTATE LEFT` / `ROTATE RIGHT ▶`), timed nudges (`80ms`, `200ms`), speed selection (Slow/Normal/Fast), and instant `⏹ STOP BASE`.
    - **Joint 1: Shoulder (SG90 180°)**: `▼ LOWER` & `RAISE ▲`, with fine adjustment buttons.
    - **Joint 2: Elbow (SG90 180°)**: `↶ RETRACT` & `EXTEND ↷`, with fine adjustment buttons.
    - **Joint 3: Claw / Gripper (SG90 180°)**: `◄ OPEN 🔓` & `GRIP 🔒 ►`, with `🔓 FULL OPEN` (30°) and `🔒 FULL GRIP` (150°) quick buttons.
@@ -37,7 +37,7 @@ An advanced 4-DOF robotic arm controller supporting **USB Serial**, **Wi-Fi Hots
 | **Shoulder** | SG90 | Positional (180°) | `GPIO 4` | 0° – 180° (Center: 90°) |
 | **Elbow** | SG90 | Positional (180°) | `GPIO 18` | 0° – 180° (Center: 90°) |
 | **Claw / Gripper** | SG90 | Positional (180°) | `GPIO 19` | 0° – 180° (Open: ~30°, Grip: ~150°) |
-| **Base Rotation** | MG90S | Continuous (360°) | `GPIO 21` | Timed tracking (Stop: 1500µs; CW: 1700µs; CCW: 1300µs) |
+| **Base Rotation** | MG90S | Continuous (360°) | `GPIO 21` | Directional Jog (Stop: 1500µs; CW: 1700µs; CCW: 1300µs) |
 
 ---
 
@@ -105,6 +105,25 @@ pio run --target uploadfs
 ```
 Partition table is configured as `huge_app.csv` (3 MB app space) to comfortably hold Wi-Fi SoftAP, Web Server, TCP Server, and Bluetooth simultaneously.
 
-### Base-servo calibration
+### Base Servo (Joint 4 / GPIO 21) Modes & Troubleshooting
 
-The base is a continuous-rotation servo, so its position is estimated from run time rather than measured with feedback. If the servo creeps while stopped, adjust `BASE_STOP_US` in `src/main.cpp` by small increments (typically 5–10 µs). If it does not start reliably, adjust `BASE_CW_US` and `BASE_CCW_US` farther from the stop value. The base wiring in this project is GPIO 21.
+The base servo supports two operational modes:
+
+1. **Standard 180° Positional Mode (Default - Recommended)**:
+   - Works with all standard SG90 and MG90S 180° servos.
+   - When the computer or web interface sends an angle (e.g. `S4,45` or `S4,120`), the servo immediately turns to that exact angle and holds position.
+   - Initialized at 90° center on boot.
+
+2. **Continuous 360° Rotation Mode**:
+   - For modified/continuous rotation servos.
+   - Toggle in `src/main.cpp` via `#define BASE_DEFAULT_CONTINUOUS 1`, or switch on-the-fly by sending `MODE4,CONT` (or `MODE4,POS` to return to positional).
+   - If a continuous servo creeps while stationary, tune `baseStopUs` in `src/main.cpp`.
+
+#### Hardware Diagnostic Test (`TEST4`)
+To verify that GPIO 21 and the base servo are physically working:
+1. Open Serial Monitor (115200 baud) or Python GUI log.
+2. Send command: `TEST4`
+3. The ESP32 will sweep the base servo (`90° -> 60° -> 120° -> 90°`) and report progress.
+
+#### Alternative Pins
+If GPIO 21 has an electrical conflict with an onboard I2C device (e.g. OLED display) or is damaged, change `#define SERVO4_PIN 21` in `src/main.cpp` to another PWM-capable pin: `22`, `23`, `25`, `26`, `27`, `32`, or `33`.

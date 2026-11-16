@@ -362,6 +362,82 @@ input[type=range]::-moz-range-thumb {
     color: #000;
 }
 
+/* CONTINUOUS SERVO JOG CONTROLS */
+.jog-row {
+    display: flex;
+    gap: 10px;
+    margin: 10px 0;
+}
+
+.btn-jog {
+    flex: 1;
+    padding: 14px 10px;
+    font-size: 0.88rem;
+    font-weight: 800;
+    border-radius: 12px;
+    border: 1px solid var(--accent);
+    background: #0f2238;
+    color: var(--accent);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    transition: all 0.12s ease;
+}
+
+.btn-jog:active, .btn-jog.active {
+    background: var(--accent);
+    color: #000;
+    box-shadow: 0 0 15px var(--accent-glow);
+    transform: scale(0.96);
+}
+
+.jog-sub {
+    font-size: 0.65rem;
+    font-weight: 600;
+    opacity: 0.85;
+}
+
+.speed-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.speed-label {
+    font-size: 0.72rem;
+    color: var(--subtext);
+    font-weight: 700;
+}
+
+.btn-speed {
+    flex: 1;
+    padding: 5px 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    border-radius: 6px;
+    background: #101626;
+    border: 1px solid var(--card-border);
+    color: var(--subtext);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-speed.active {
+    background: #183a60;
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+}
+
 /* MOBILE RESPONSIVENESS */
 @media (max-width: 420px) {
     .preset-panel {

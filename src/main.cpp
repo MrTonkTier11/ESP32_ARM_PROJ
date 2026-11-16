@@ -47,7 +47,7 @@ bool littleFsMounted = false;
 #define SERVO1_PIN 4   // Shoulder (SG90 - 180° Positional)
 #define SERVO2_PIN 18  // Elbow (SG90 - 180° Positional)
 #define SERVO3_PIN 19  // Claw / Gripper (SG90 - 180° Positional)
-#define SERVO4_PIN 21  // Base Rotation (MG90S - 360° Continuous)
+#define SERVO4_PIN 21  // Base Rotation (MG90S 360° Continuous - Jog Control)
 
 // ============================================================================
 // SERVO OBJECTS & SETTINGS
@@ -57,27 +57,36 @@ Servo servo2;
 Servo servo3;
 Servo servo4;
 
-// SG90 Pulse limits (microseconds)
-const int SERVO_MIN_US = 600;
-const int SERVO_MAX_US = 2300;
+// Standard Pulse limits (microseconds)
+const int SERVO_MIN_US = 500;
+const int SERVO_MAX_US = 2400;
 
-// Current joint positions (degrees 0-180)
+// Current joint positions in degrees (0-180 for positional servos 1-3)
 int pos1 = 90; // Shoulder
 int pos2 = 90; // Elbow
 int pos3 = 90; // Claw
+int pos4 = 90; // Base virtual center
 
-// MG90S Continuous Rotation calibration & tracking
-const int BASE_STOP_US = 1500;
-const int BASE_CW_US = 1700;
-const int BASE_CCW_US = 1300;
-const float BASE_MS_PER_DEG = 12.0f;
-const float BASE_ESTIMATE_PERIOD_DEG = 360.0f;
+// ============================================================================
+// BASE SERVO (MG90S 360° CONTINUOUS ROTATION) JOG & SPEED CONFIGURATION
+// ============================================================================
+// Neutral stop pulse (microseconds). Tune with CAL4,<us> if motor creeps at idle.
+int baseStopUs = 1500;
 
-float basePosition = 90.0f;
-float baseTarget = 90.0f;
-int baseDirection = 0;
-unsigned long lastBaseUpdate = 0;
-bool baseManualJog = false;
+// Default jog speed pulse offset from baseStopUs (range: 50 to 450)
+// e.g. 1500 + 200 = 1700us (CW), 1500 - 200 = 1300us (CCW)
+int baseJogSpeedOffset = 200;
+
+// Current base motor state: 0 = STOPPED, +1 = ROTATING CW, -1 = ROTATING CCW
+int baseState = 0;
+
+// Timed nudge / step state
+bool isBaseStepping = false;
+unsigned long baseStepEndTime = 0;
+
+// Safety timeout: automatically halts continuous rotation if connection drops
+unsigned long baseJogAutoStopTime = 0;
+const unsigned long BASE_JOG_SAFETY_TIMEOUT_MS = 3000;
 
 // ============================================================================
 // INPUT BUFFERS FOR SERIAL STREAMS
@@ -99,13 +108,18 @@ int btBufIndex = 0;
 // FORWARD DECLARATIONS
 // ============================================================================
 void stopBase();
+void jogBase(int direction, int speedOffset = 0);
+void stepBaseTimed(int direction, unsigned long durationMs, int speedOffset = 0);
 void updateBase();
-void setBaseTarget(int newTarget);
+void testBaseServo(Stream *replyStream);
 void movePositionalServo(Servo &servo, int &currentPosition, int newPosition);
 void processCommand(const char *command, Stream *replyStream);
 void checkStreamInput(Stream &stream, char *buffer, int &bufIndex, Stream *replyStream);
 void setupWebServer();
 void handleServeFile(const char* path, const char* contentType, const char* progmemFallback);
+void handleApiJog();
+void handleApiStep();
+void handleApiCal4();
 void handleApiSet();
 void handleApiStatus();
 void handleApiStop();
@@ -116,85 +130,98 @@ void handleNotFound();
 // SERVO MOVEMENT LOGIC
 // ============================================================================
 
+// Standard positional servo movement (SG90)
 void movePositionalServo(Servo &servo, int &currentPosition, int newPosition) {
     newPosition = constrain(newPosition, 0, 180);
-    if (newPosition == currentPosition) {
-        return;
-    }
     currentPosition = newPosition;
     servo.write(newPosition);
 }
 
+// Holds neutral stop pulse to completely halt the continuous base motor
 void stopBase() {
-    servo4.writeMicroseconds(BASE_STOP_US);
-    baseDirection = 0;
-    baseManualJog = false;
-    baseTarget = constrain(basePosition, 0.0f, 180.0f);
+    servo4.writeMicroseconds(baseStopUs);
+    baseState = 0;
+    isBaseStepping = false;
+    baseStepEndTime = 0;
+    baseJogAutoStopTime = 0;
+    pos4 = 90;
 }
 
+// Continuous Jog: direction = +1 (CW), -1 (CCW), 0 (STOP)
+void jogBase(int direction, int speedOffset) {
+    if (direction == 0) {
+        stopBase();
+        return;
+    }
+    if (speedOffset <= 0) speedOffset = baseJogSpeedOffset;
+    speedOffset = constrain(speedOffset, 50, 450);
+
+    baseState = (direction > 0) ? 1 : -1;
+    isBaseStepping = false;
+    baseJogAutoStopTime = millis() + BASE_JOG_SAFETY_TIMEOUT_MS;
+
+    int pulse = (direction > 0) ? (baseStopUs + speedOffset) : (baseStopUs - speedOffset);
+    servo4.writeMicroseconds(pulse);
+    pos4 = (direction > 0) ? 135 : 45;
+}
+
+// Timed Nudge / Step: rotates base for durationMs then stops automatically
+void stepBaseTimed(int direction, unsigned long durationMs, int speedOffset) {
+    if (direction == 0 || durationMs == 0) {
+        stopBase();
+        return;
+    }
+    if (speedOffset <= 0) speedOffset = baseJogSpeedOffset;
+    speedOffset = constrain(speedOffset, 50, 450);
+    durationMs = constrain(durationMs, 20, 5000);
+
+    baseState = (direction > 0) ? 1 : -1;
+    isBaseStepping = true;
+    baseStepEndTime = millis() + durationMs;
+    baseJogAutoStopTime = 0;
+
+    int pulse = (direction > 0) ? (baseStopUs + speedOffset) : (baseStopUs - speedOffset);
+    servo4.writeMicroseconds(pulse);
+    pos4 = (direction > 0) ? 135 : 45;
+}
+
+// Background handler for timed steps and safety timeouts
 void updateBase() {
+    if (baseState == 0) return;
+
     unsigned long now = millis();
 
-    if (lastBaseUpdate == 0) {
-        lastBaseUpdate = now;
+    // 1. Timed step finished
+    if (isBaseStepping && now >= baseStepEndTime) {
+        stopBase();
         return;
     }
 
-    unsigned long elapsed = now - lastBaseUpdate;
-    lastBaseUpdate = now;
-
-    // Prevent jump if loop was delayed
-    if (elapsed > 500) {
-        elapsed = 50;
-    }
-
-    if (baseManualJog) {
-        // Continuous manual jog
-        float movement = (float)elapsed / BASE_MS_PER_DEG;
-        basePosition += baseDirection * movement;
-        while (basePosition >= BASE_ESTIMATE_PERIOD_DEG) basePosition -= BASE_ESTIMATE_PERIOD_DEG;
-        while (basePosition < 0.0f) basePosition += BASE_ESTIMATE_PERIOD_DEG;
+    // 2. Safety timeout for continuous jog (halts runaway rotation if client disconnects)
+    if (!isBaseStepping && baseJogAutoStopTime > 0 && now >= baseJogAutoStopTime) {
+        stopBase();
+        Serial.println("[BASE] Safety timeout reached - Base motor stopped.");
         return;
-    }
-
-    // Estimated movement toward target angle
-    if (baseDirection != 0) {
-        float movement = (float)elapsed / BASE_MS_PER_DEG;
-        basePosition += baseDirection * movement;
-
-        if (baseDirection > 0) {
-            basePosition = min(basePosition, baseTarget);
-        } else {
-            basePosition = max(basePosition, baseTarget);
-        }
-    }
-
-    float difference = baseTarget - basePosition;
-
-    if (fabs(difference) < 0.5f) {
-        basePosition = baseTarget;
-        if (baseDirection != 0) {
-            stopBase();
-        }
-        return;
-    }
-
-    int requestedDirection = (difference > 0) ? 1 : -1;
-
-    if (requestedDirection != baseDirection) {
-        baseDirection = requestedDirection;
-        if (baseDirection > 0) {
-            servo4.writeMicroseconds(BASE_CW_US);
-        } else {
-            servo4.writeMicroseconds(BASE_CCW_US);
-        }
     }
 }
 
-void setBaseTarget(int newTarget) {
-    updateBase();
-    baseManualJog = false;
-    baseTarget = constrain(newTarget, 0, 180);
+// Hardware diagnostic sweep test for GPIO 21 Base Continuous Servo
+void testBaseServo(Stream *replyStream) {
+    if (replyStream) replyStream->println("[TEST] Starting Base Servo (GPIO 21) Continuous Jog Test...");
+
+    stopBase();
+    delay(200);
+
+    if (replyStream) replyStream->println("[TEST] Rotating Clockwise (CW) for 500ms...");
+    stepBaseTimed(1, 500);
+    delay(700);
+
+    if (replyStream) replyStream->println("[TEST] Rotating Counter-Clockwise (CCW) for 500ms...");
+    stepBaseTimed(-1, 500);
+    delay(700);
+
+    stopBase();
+    if (replyStream) replyStream->println("[TEST] Base Servo Test Complete. GPIO 21 is operational!");
 }
 
 // ============================================================================
@@ -211,18 +238,80 @@ void processCommand(const char *command, Stream *replyStream) {
 
     // Emergency or normal base stop
     if (strcmp(command, "STOP4") == 0 || strcmp(command, "STOP") == 0) {
-        updateBase();
         stopBase();
         if (replyStream) replyStream->println("BASE STOPPED");
         return;
     }
 
-    // Reset all servos to 90 degrees
+    // Hardware sweep test for GPIO 21
+    if (strcmp(command, "TEST4") == 0) {
+        testBaseServo(replyStream);
+        return;
+    }
+
+    // Calibrate neutral stop pulse: CAL4,<us> (e.g. CAL4,1500 or CAL4,1490 if motor creeps at idle)
+    if (strncmp(command, "CAL4,", 5) == 0) {
+        int cal = atoi(command + 5);
+        if (cal >= 1400 && cal <= 1600) {
+            baseStopUs = cal;
+            stopBase();
+            if (replyStream) replyStream->printf("BASE STOP PULSE SET: %d us\n", baseStopUs);
+        }
+        return;
+    }
+
+    // Direct microsecond write to base servo: US4,1500
+    if (strncmp(command, "US4,", 4) == 0) {
+        int us = atoi(command + 4);
+        if (us >= 500 && us <= 2500) {
+            servo4.writeMicroseconds(us);
+            if (replyStream) replyStream->printf("ACK,US4,%d\n", us);
+        }
+        return;
+    }
+
+    // Timed step / nudge command: STEP4,CW,150 or STEP4,CCW,150
+    if (strncmp(command, "STEP4,", 6) == 0) {
+        char dirStr[8] = {0};
+        int durationMs = 150;
+        int parsed = sscanf(command + 6, "%7[^,],%d", dirStr, &durationMs);
+        if (parsed >= 1) {
+            int dir = (strcmp(dirStr, "CW") == 0) ? 1 : ((strcmp(dirStr, "CCW") == 0) ? -1 : 0);
+            if (dir != 0) {
+                stepBaseTimed(dir, durationMs);
+                if (replyStream) replyStream->printf("ACK,STEP4,%s,%d\n", dirStr, durationMs);
+            } else {
+                stopBase();
+                if (replyStream) replyStream->println("ACK,STEP4,STOP");
+            }
+        }
+        return;
+    }
+
+    // Continuous manual jog for base: J4,CW or J4,CCW or J4,STOP or J4,CW,250
+    if (strncmp(command, "J4,", 3) == 0) {
+        char dirStr[8] = {0};
+        int speed = baseJogSpeedOffset;
+        sscanf(command + 3, "%7[^,],%d", dirStr, &speed);
+        if (strcmp(dirStr, "CW") == 0) {
+            jogBase(1, speed);
+            if (replyStream) replyStream->printf("ACK,J4,CW,%d\n", speed);
+        } else if (strcmp(dirStr, "CCW") == 0) {
+            jogBase(-1, speed);
+            if (replyStream) replyStream->printf("ACK,J4,CCW,%d\n", speed);
+        } else {
+            stopBase();
+            if (replyStream) replyStream->println("ACK,J4,STOP");
+        }
+        return;
+    }
+
+    // Reset all servos
     if (strcmp(command, "RESET") == 0) {
         movePositionalServo(servo1, pos1, 90);
         movePositionalServo(servo2, pos2, 90);
         movePositionalServo(servo3, pos3, 90);
-        setBaseTarget(90);
+        stopBase();
         if (replyStream) replyStream->println("RESET OK");
         return;
     }
@@ -236,33 +325,13 @@ void processCommand(const char *command, Stream *replyStream) {
     // Status query
     if (strcmp(command, "STATUS") == 0) {
         if (replyStream) {
-            replyStream->printf("STATUS,S1:%d,S2:%d,S3:%d,S4:%d\n", pos1, pos2, pos3, (int)round(basePosition));
+            replyStream->printf("STATUS,S1:%d,S2:%d,S3:%d,S4:%d,BASE_STATE:%d,STOP_US:%d\n",
+                                pos1, pos2, pos3, pos4, baseState, baseStopUs);
         }
         return;
     }
 
-    // Continuous manual jog for base: J4,CW or J4,CCW or J4,STOP
-    if (strncmp(command, "J4,", 3) == 0) {
-        const char *dir = command + 3;
-        updateBase();
-        if (strcmp(dir, "CW") == 0) {
-            baseManualJog = true;
-            baseDirection = 1;
-            servo4.writeMicroseconds(BASE_CW_US);
-            if (replyStream) replyStream->println("JOG CW");
-        } else if (strcmp(dir, "CCW") == 0) {
-            baseManualJog = true;
-            baseDirection = -1;
-            servo4.writeMicroseconds(BASE_CCW_US);
-            if (replyStream) replyStream->println("JOG CCW");
-        } else {
-            stopBase();
-            if (replyStream) replyStream->println("JOG STOP");
-        }
-        return;
-    }
-
-    // Parse servo position command: S1,90 or S2,120 etc.
+    // Parse servo position command: S1,90 or S2,120 or S4,100 etc.
     const char *separator = strchr(command, ',');
     if (separator == nullptr) {
         return;
@@ -301,7 +370,17 @@ void processCommand(const char *command, Stream *replyStream) {
         if (replyStream) replyStream->printf("ACK,S3,%d\n", pos3);
     }
     else if (strcmp(servoID, "S4") == 0) {
-        setBaseTarget(value);
+        // Slider compatibility for continuous motor:
+        // Center (85-95) = STOP, >95 = rotate CW, <85 = rotate CCW
+        if (abs(value - 90) <= 5) {
+            stopBase();
+        } else if (value > 90) {
+            int speed = map(value, 95, 180, 80, 350);
+            jogBase(1, speed);
+        } else {
+            int speed = map(value, 85, 0, 80, 350);
+            jogBase(-1, speed);
+        }
         if (replyStream) replyStream->printf("ACK,S4,%d\n", value);
     }
 }
@@ -342,6 +421,66 @@ void handleServeFile(const char* path, const char* contentType, const char* prog
     }
 }
 
+// REST API: Continuous Jog
+// GET /api/jog?dir=CW&speed=200 or /api/jog?dir=CCW or /api/jog?dir=STOP
+void handleApiJog() {
+    if (webServer.hasArg("dir")) {
+        String dir = webServer.arg("dir");
+        int speed = webServer.hasArg("speed") ? webServer.arg("speed").toInt() : baseJogSpeedOffset;
+        if (dir.equalsIgnoreCase("CW")) {
+            jogBase(1, speed);
+        } else if (dir.equalsIgnoreCase("CCW")) {
+            jogBase(-1, speed);
+        } else {
+            stopBase();
+        }
+        char json[96];
+        snprintf(json, sizeof(json), "{\"status\":\"ok\",\"baseState\":%d,\"speed\":%d}", baseState, speed);
+        webServer.send(200, "application/json", json);
+        return;
+    }
+    webServer.send(400, "application/json", "{\"error\":\"Missing parameter 'dir'\"}");
+}
+
+// REST API: Timed Nudge / Step
+// GET /api/step?dir=CW&ms=150
+void handleApiStep() {
+    if (webServer.hasArg("dir")) {
+        String dir = webServer.arg("dir");
+        int ms = webServer.hasArg("ms") ? webServer.arg("ms").toInt() : 150;
+        int speed = webServer.hasArg("speed") ? webServer.arg("speed").toInt() : baseJogSpeedOffset;
+        if (dir.equalsIgnoreCase("CW")) {
+            stepBaseTimed(1, ms, speed);
+        } else if (dir.equalsIgnoreCase("CCW")) {
+            stepBaseTimed(-1, ms, speed);
+        } else {
+            stopBase();
+        }
+        char json[96];
+        snprintf(json, sizeof(json), "{\"status\":\"ok\",\"baseState\":%d,\"stepMs\":%d}", baseState, ms);
+        webServer.send(200, "application/json", json);
+        return;
+    }
+    webServer.send(400, "application/json", "{\"error\":\"Missing parameter 'dir'\"}");
+}
+
+// REST API: Tune Stop Pulse
+// GET /api/cal4?us=1500
+void handleApiCal4() {
+    if (webServer.hasArg("us")) {
+        int us = webServer.arg("us").toInt();
+        if (us >= 1400 && us <= 1600) {
+            baseStopUs = us;
+            stopBase();
+            char json[96];
+            snprintf(json, sizeof(json), "{\"status\":\"ok\",\"baseStopUs\":%d}", baseStopUs);
+            webServer.send(200, "application/json", json);
+            return;
+        }
+    }
+    webServer.send(400, "application/json", "{\"error\":\"Invalid 'us' parameter (1400-1600)\"}");
+}
+
 void handleApiSet() {
     if (webServer.hasArg("s") && webServer.hasArg("v")) {
         int servoNum = webServer.arg("s").toInt();
@@ -350,10 +489,20 @@ void handleApiSet() {
         if (servoNum == 1) movePositionalServo(servo1, pos1, val);
         else if (servoNum == 2) movePositionalServo(servo2, pos2, val);
         else if (servoNum == 3) movePositionalServo(servo3, pos3, val);
-        else if (servoNum == 4) setBaseTarget(val);
+        else if (servoNum == 4) {
+            if (abs(val - 90) <= 5) {
+                stopBase();
+            } else if (val > 90) {
+                int speed = map(val, 95, 180, 80, 350);
+                jogBase(1, speed);
+            } else {
+                int speed = map(val, 85, 0, 80, 350);
+                jogBase(-1, speed);
+            }
+        }
 
         char json[96];
-        snprintf(json, sizeof(json), "{\"status\":\"ok\",\"s\":%d,\"v\":%d}", servoNum, val);
+        snprintf(json, sizeof(json), "{\"status\":\"ok\",\"s\":%d,\"v\":%d,\"baseState\":%d}", servoNum, val, baseState);
         webServer.send(200, "application/json", json);
         return;
     }
@@ -361,24 +510,23 @@ void handleApiSet() {
 }
 
 void handleApiStatus() {
-    char json[128];
+    char json[160];
     snprintf(json, sizeof(json),
-             "{\"s1\":%d,\"s2\":%d,\"s3\":%d,\"s4\":%d,\"basePos\":%d}",
-             pos1, pos2, pos3, (int)round(baseTarget), (int)round(basePosition));
+             "{\"s1\":%d,\"s2\":%d,\"s3\":%d,\"s4\":%d,\"baseState\":%d,\"baseStopUs\":%d}",
+             pos1, pos2, pos3, pos4, baseState, baseStopUs);
     webServer.send(200, "application/json", json);
 }
 
 void handleApiStop() {
-    updateBase();
     stopBase();
-    webServer.send(200, "application/json", "{\"status\":\"stopped\"}");
+    webServer.send(200, "application/json", "{\"status\":\"stopped\",\"baseState\":0}");
 }
 
 void handleApiReset() {
     movePositionalServo(servo1, pos1, 90);
     movePositionalServo(servo2, pos2, 90);
     movePositionalServo(servo3, pos3, 90);
-    setBaseTarget(90);
+    stopBase();
     webServer.send(200, "application/json", "{\"status\":\"reset\"}");
 }
 
@@ -441,6 +589,9 @@ void setupWebServer() {
     });
 
     // REST API routes
+    webServer.on("/api/jog", HTTP_GET, handleApiJog);
+    webServer.on("/api/step", HTTP_GET, handleApiStep);
+    webServer.on("/api/cal4", HTTP_GET, handleApiCal4);
     webServer.on("/api/set", HTTP_GET, handleApiSet);
     webServer.on("/api/status", HTTP_GET, handleApiStatus);
     webServer.on("/api/stop", HTTP_GET, handleApiStop);
@@ -489,28 +640,42 @@ void setup() {
     delay(200);
 
     Serial.println();
-    Serial.println("==========================================");
-    Serial.println("  ESP32 ROBOTIC ARM CONTROLLER INITIALIZING");
-    Serial.println("==========================================");
+    Serial.println("==================================================");
+    Serial.println("   ESP32 ROBOTIC ARM CONTROLLER INITIALIZING");
+    Serial.println("==================================================");
 
-    // 1. Initialize Servos
+    // 1. Allocate all 4 hardware PWM timers for ESP32Servo
+    ESP32PWM::allocateTimer(0);
+    ESP32PWM::allocateTimer(1);
+    ESP32PWM::allocateTimer(2);
+    ESP32PWM::allocateTimer(3);
+
     servo1.setPeriodHertz(50);
     servo2.setPeriodHertz(50);
     servo3.setPeriodHertz(50);
     servo4.setPeriodHertz(50);
 
-    servo1.attach(SERVO1_PIN, SERVO_MIN_US, SERVO_MAX_US);
-    servo2.attach(SERVO2_PIN, SERVO_MIN_US, SERVO_MAX_US);
-    servo3.attach(SERVO3_PIN, SERVO_MIN_US, SERVO_MAX_US);
-    servo4.attach(SERVO4_PIN, 1000, 2000);
+    int ch1 = servo1.attach(SERVO1_PIN, SERVO_MIN_US, SERVO_MAX_US);
+    int ch2 = servo2.attach(SERVO2_PIN, SERVO_MIN_US, SERVO_MAX_US);
+    int ch3 = servo3.attach(SERVO3_PIN, SERVO_MIN_US, SERVO_MAX_US);
+    int ch4 = servo4.attach(SERVO4_PIN, SERVO_MIN_US, SERVO_MAX_US);
 
-    // Initial positions
+    Serial.println("[SERVO] Hardware PWM Attach Status:");
+    Serial.printf("  [S1] Shoulder (GPIO %2d): %s (LEDC Channel %d)\n", SERVO1_PIN, servo1.attached() ? "READY" : "FAILED", ch1);
+    Serial.printf("  [S2] Elbow    (GPIO %2d): %s (LEDC Channel %d)\n", SERVO2_PIN, servo2.attached() ? "READY" : "FAILED", ch2);
+    Serial.printf("  [S3] Claw     (GPIO %2d): %s (LEDC Channel %d)\n", SERVO3_PIN, servo3.attached() ? "READY" : "FAILED", ch3);
+    Serial.printf("  [S4] Base     (GPIO %2d): %s (LEDC Channel %d) [MG90S 360° Continuous Jog Mode]\n",
+                  SERVO4_PIN, servo4.attached() ? "READY" : "FAILED", ch4);
+
+    if (!servo4.attached()) {
+        Serial.println("  [WARNING] S4 Base Servo failed to attach to GPIO 21!");
+    }
+
+    // Set initial positions: 90° for positional joints 1-3, neutral stop pulse for continuous base
     servo1.write(pos1);
     servo2.write(pos2);
     servo3.write(pos3);
     stopBase();
-
-    lastBaseUpdate = millis();
 
     // 2. Start Wi-Fi Access Point (SoftAP)
     WiFi.mode(WIFI_AP);
@@ -542,9 +707,11 @@ void setup() {
     }
 #endif
 
-    Serial.println("==========================================");
+    Serial.println("==================================================");
     Serial.println("  ESP32 READY: USB, WI-FI & BT ACTIVE");
-    Serial.println("==========================================");
+    Serial.println("  Base Mode: MG90S 360° Continuous (Jog & Timed Nudge)");
+    Serial.println("  Tip: Send 'TEST4' over Serial to test Base Servo!");
+    Serial.println("==================================================");
 }
 
 // ============================================================================
@@ -552,7 +719,7 @@ void setup() {
 // ============================================================================
 
 void loop() {
-    // 1. Update continuous rotation base estimation
+    // 1. Process timed step completion & safety timeout for continuous base motor
     updateBase();
 
     // 2. Handle HTTP Web Server requests (Mobile Web GUI)
