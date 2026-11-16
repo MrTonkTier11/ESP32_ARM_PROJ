@@ -8,8 +8,8 @@ class ArmState:
 
     JOINTS = (1, 2, 3, 4)          # 1 Shoulder, 2 Elbow, 3 Claw, 4 Base
     NAMES = {1: "Shoulder", 2: "Elbow", 3: "Claw", 4: "Base"}
-    MIN_ANGLE = 30
-    MAX_ANGLE = 150
+    MIN_ANGLE = 0
+    MAX_ANGLE = 180
     DEFAULT = 90
 
     def __init__(self):
