@@ -10,15 +10,14 @@ An advanced 4-DOF robotic arm controller supporting **USB Serial**, **Wi-Fi Hots
    - **USB Serial (COM Port)**: Direct control when plugged into a PC/laptop via USB cable (115200 baud).
    - **Wi-Fi SoftAP**: Broadcasts its own hotspot (`RoboticArm-ESP32`) for standalone external-power operation.
    - **Smartphone Mobile Web GUI**: Built-in responsive web application served on port 80 (`http://192.168.4.1`) for iPhones, Android phones, tablets, or laptops—**zero app installation required!**
-   - **Desktop Python GUI**: Dual-mode (USB Serial & Wi-Fi TCP socket on port 5000) with auto-port detection.
+   - **Desktop Python GUI**: Dual-mode (USB Serial & Wi-Fi TCP socket on port 5000) with auto-port detection and interactive 2D kinematics display.
    - **Bluetooth Classic SPP**: Wireless serial connection named `ESP32_RoboticArm`.
 
 2. **Intuitive Joint Mimic Controls & Directional Arrows**:
-   - **Joint 4: Base Rotation (MG90S Continuous)**: `↺ ◀ CCW` (Counter-Clockwise) & `CW ▶ ↻` (Clockwise), with timed tracking and instant `⏹ STOP BASE`.
-   - **Joint 1: Shoulder (SG90 180°)**: `▼ LOWER` & `RAISE ▲`.
-   - **Joint 2: Elbow (SG90 180°)**: `↶ RETRACT` & `EXTEND ↷`.
-   - **Joint 3: Claw / Gripper (SG90 180°)**: `◄ OPEN 🔓` & `GRIP 🔒 ►`, with `🔓 FULL OPEN` and `🔒 FULL GRIP` quick buttons.
-   - Fine-step adjustment buttons: `[-5°]`, `[-1°]`, `[+1°]`, `[+5°]`.
+   - **Joint 4: Base Rotation (MG90S Continuous)**: `↺ ◀ CCW` (Counter-Clockwise) & `CW ▶ ↻` (Clockwise), fine stepping (`-5°`, `-1°`, `+1°`, `+5°`), timed tracking, and instant `⏹ STOP BASE`.
+   - **Joint 1: Shoulder (SG90 180°)**: `▼ LOWER` & `RAISE ▲`, with fine adjustment buttons.
+   - **Joint 2: Elbow (SG90 180°)**: `↶ RETRACT` & `EXTEND ↷`, with fine adjustment buttons.
+   - **Joint 3: Claw / Gripper (SG90 180°)**: `◄ OPEN 🔓` & `GRIP 🔒 ►`, with `🔓 FULL OPEN` (30°) and `🔒 FULL GRIP` (150°) quick buttons.
 
 3. **Live 2D Kinematic Mimic Visualizer**:
    - Both the Desktop Python GUI and Smartphone Web GUI feature real-time vector graphics that bend the shoulder, elbow, and open/close the claw pincers in sync with your commands.
@@ -55,6 +54,25 @@ When the ESP32 is powered via battery, power bank, or 5V DC adapter:
 
 ---
 
+## 🌐 Web Host Control Files (`WebHostControl/`)
+
+The web interface is modularized in the dedicated `WebHostControl/` directory:
+- **`index.html`**: Clean semantic HTML structure, responsive SVG kinematic mimic visualizer, joint cards, presets, and action buttons.
+- **`style.css`**: Cyber-dark theme with glowing accents, tactile touch buttons, animated connection indicators, and mobile-responsive viewport styling.
+- **`script.js`**: Frontend JavaScript controller managing debounced REST calls (`/api/set`, `/api/stop`, `/api/reset`), live SVG arm pose calculations, and bi-directional status synchronization.
+
+### Dual Serving Mechanism (LittleFS + PROGMEM Fallback)
+The firmware supports both:
+1. **LittleFS filesystem streaming**: Serves live files from flash memory if uploaded. `platformio.ini` is configured with `data_dir = WebHostControl`.
+2. **PROGMEM embedded fallback (`include/web_assets.h`)**: If LittleFS is unformatted or not uploaded yet, the ESP32 automatically serves the embedded assets. Flashing firmware alone works 100% out of the box!
+
+To rebuild `include/web_assets.h` after modifying files in `WebHostControl/`:
+```powershell
+python tools/build_web_assets.py
+```
+
+---
+
 ## 💻 How to Run the Desktop Python GUI
 
 1. Open PowerShell or Command Prompt in the project folder:
@@ -67,7 +85,7 @@ When the ESP32 is powered via battery, power bank, or 5V DC adapter:
    ```
 3. Run the GUI:
    ```powershell
-   python GUI_REMOTE_CONTROL\main.py
+   python GUI_ROBOTIC_ARM\main.py
    ```
 4. **Choose your connection mode**:
    - **USB Serial**: Select your COM port (e.g. `COM6`), baud `115200`, and click **CONNECT**.
@@ -79,8 +97,11 @@ When the ESP32 is powered via battery, power bank, or 5V DC adapter:
 
 To compile and upload using PlatformIO:
 ```powershell
-# From PlatformIO in VS Code or CLI:
+# Upload firmware:
 pio run --target upload
+
+# Upload LittleFS filesystem image (optional, embedded fallback is built-in):
+pio run --target uploadfs
 ```
 Partition table is configured as `huge_app.csv` (3 MB app space) to comfortably hold Wi-Fi SoftAP, Web Server, TCP Server, and Bluetooth simultaneously.
 
