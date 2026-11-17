@@ -4,20 +4,18 @@ import tkinter as tk
 
 
 class ArmState:
-    """Holds the 4 joint angles (0-180). No drawing, no networking."""
+    """Holds the 4 joint angles. No drawing, no networking."""
 
     JOINTS = (1, 2, 3, 4)          # 1 Shoulder, 2 Elbow, 3 Claw, 4 Base
     NAMES = {1: "Shoulder", 2: "Elbow", 3: "Claw", 4: "Base"}
-    DEFAULTS = {1: 90, 2:90, 3:90, 4:180}
+    DEFAULTS = {1: 90, 2: 90, 3: 90, 4: 0}
     INVERTED = {3: True}
-
-
 
     RANGES = {
         1: (30, 150),
         2: (0, 180),
         3: (0, 180),
-        4: (0,360),
+        4: (-180, 180),
     }
 
     def __init__(self):
@@ -25,21 +23,25 @@ class ArmState:
 
     def to_servo(self, joint_id, value):
         if self.INVERTED.get(joint_id):
-            lo, hi =self.RANGES[joint_id]
-            return lo+hi - int(value)
+            lo, hi = self.RANGES[joint_id]
+            return lo + hi - int(value)
         return int(value)
 
     def limits(self, joint_id):
         return self.RANGES[joint_id]
 
-    def clamp(self, jont_id, value):
-        lo, hi = self.RANGES[jont_id]
-        return max(lo, min(hi, int(float(value))))
+    def clamp(self, joint_id, value):
+        val = int(round(float(value)))
+        if joint_id == 4:
+            # Wrap around 360° continuously (-180° to +180°)
+            return ((val + 180) % 360) - 180
+        lo, hi = self.RANGES[joint_id]
+        return max(lo, min(hi, val))
 
     def get(self, joint_id):
         return self.vars[joint_id].get()
 
     def set(self, joint_id, value):
-        value = self.clamp(joint_id,value)
+        value = self.clamp(joint_id, value)
         self.vars[joint_id].set(value)
         return value

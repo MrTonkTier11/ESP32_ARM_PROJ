@@ -1,4 +1,4 @@
-"""arm_visualizer.py - live 2D drawing of the arm (inclined pose)."""
+"""arm_visualizer.py - live 2D drawing of the arm with rotating base directional arrow."""
 
 import math
 import tkinter as tk
@@ -14,12 +14,12 @@ class ArmVisualizer(tk.Canvas):
 
     def __init__(self, parent, state):
         super().__init__(parent, bg="#090d15", highlightthickness=1,
-                         highlightbackground=CARD_BORDER, height=210)
+                         highlightbackground=CARD_BORDER, height=225)
         self.state = state
         self.bind("<Configure>", lambda e: self.redraw())
 
     def redraw(self):
-        """Draws a 2D vector graphic of the arm (inclined pose, no text labels)."""
+        """Draws a 2D vector graphic of the arm with interactive rotating base direction arrow."""
         c = self
         c.delete("all")
 
@@ -28,29 +28,76 @@ class ArmVisualizer(tk.Canvas):
         if w < 10:
             w = 350
         if h < 10:
-            h = 210
+            h = 225
 
-        # Centre the whole drawing (base + inclined arm) in the canvas.
+        # Centre the whole drawing in the canvas
         bx = w // 2 - 16
-        by = h - 35
+        by = h - 44
 
         shoulder_deg = (self.state.get(1) - 90) * 0.8
         elbow_deg = (self.state.get(2) - 90) * 0.8
-        claw_servo =self.state.to_servo(3, self.state.get(3))
+        claw_servo = self.state.to_servo(3, self.state.get(3))
         claw_spread = max(3, min(24, (180 - claw_servo) * 0.13))
+        base_angle = self.state.get(4)  # 0° = forward, negative = left, positive = right
 
-        # Base platform
-        c.create_rectangle(bx - 55, by, bx + 55, by + 16, fill="#1c2538", outline="#2b3b59", width=2)
-        c.create_oval(bx - 18, by - 6, bx + 18, by + 12, fill="#0f1624", outline=ACCENT_CYAN, width=2)
+        # 1. Base Pedestal Platform
+        c.create_rectangle(bx - 60, by + 4, bx + 60, by + 20, fill="#151d2d", outline="#25324d", width=2)
+        c.create_rectangle(bx - 70, by + 18, bx + 70, by + 26, fill="#0f1624", outline="#1c263a", width=1)
 
+        # 2. Base Turntable Dial
+        c.create_oval(bx - 32, by - 12, bx + 32, by + 16, fill="#0c121e", outline="#25324d", width=2)
+        c.create_oval(bx - 26, by - 8, bx + 26, by + 12, fill="#131c2c", outline="#1f2d45", width=1)
+
+        # 3. Base Direction Arrow
+        # 0° = pointing UP/forward, negative = CCW/left, positive = CW/right
+        rad_b = math.radians(base_angle)
+        arrow_len = 22
+        cx = bx
+        cy = by + 2
+
+        tip_x = cx + arrow_len * math.sin(rad_b)
+        tip_y = cy - arrow_len * math.cos(rad_b)
+
+        # Arrow shaft
+        c.create_line(cx, cy, tip_x, tip_y, fill=ACCENT_CYAN, width=3, capstyle="round")
+
+        # Arrowhead polygon
+        barb_len = 7
+        barb_w = 5
+        b1_x = cx + (arrow_len - barb_len) * math.sin(rad_b) - barb_w * math.cos(rad_b)
+        b1_y = cy - (arrow_len - barb_len) * math.cos(rad_b) - barb_w * math.sin(rad_b)
+        b2_x = cx + (arrow_len - barb_len) * math.sin(rad_b) + barb_w * math.cos(rad_b)
+        b2_y = cy - (arrow_len - barb_len) * math.cos(rad_b) + barb_w * math.sin(rad_b)
+        mid_x = cx + (arrow_len - 5) * math.sin(rad_b)
+        mid_y = cy - (arrow_len - 5) * math.cos(rad_b)
+
+        c.create_polygon(tip_x, tip_y, b1_x, b1_y, mid_x, mid_y, b2_x, b2_y,
+                         fill=ACCENT_CYAN, outline="#ffffff", width=1)
+
+        # Turntable center pivot cap
+        c.create_oval(cx - 4, cy - 4, cx + 4, cy + 4, fill="#ffffff", outline=ACCENT_CYAN, width=2)
+
+        # Base heading readout text below platform
+        norm_ang = ((int(base_angle) + 180) % 360) - 180
+        if norm_ang == 0:
+            dir_label = "BASE: 0° [CENTER]"
+        elif norm_ang < 0:
+            dir_label = f"BASE: ◀ {abs(norm_ang)}° LEFT"
+        else:
+            dir_label = f"BASE: {norm_ang}° RIGHT ▶"
+        c.create_text(bx, by + 34, text=dir_label, fill=ACCENT_CYAN, font=("Segoe UI", 8, "bold"))
+
+        # 4. Upper arm kinematics (Shoulder)
         rad_s = math.radians(-90 + self.LEAN_DEG + shoulder_deg)
         ex = bx + self.L1 * math.cos(rad_s)
         ey = by + self.L1 * math.sin(rad_s)
 
+        # 5. Forearm kinematics (Elbow)
         rad_e = rad_s + math.radians(self.ELBOW_BEND_DEG + elbow_deg)
         wx = ex + self.L2 * math.cos(rad_e)
         wy = ey + self.L2 * math.sin(rad_e)
 
+        # Draw arm segments and joint pivots
         c.create_line(bx, by, ex, ey, fill="#00b0ff", width=7, capstyle="round")
         c.create_oval(bx - 6, by - 6, bx + 6, by + 6, fill="#ffffff", outline=ACCENT_CYAN, width=2)
 
@@ -59,6 +106,7 @@ class ArmVisualizer(tk.Canvas):
 
         c.create_oval(wx - 4, wy - 4, wx + 4, wy + 4, fill=COLOR_YELLOW, outline="#ffab00", width=1)
 
+        # 6. Claw dual-finger pincers
         rad_perp = rad_e + math.pi / 2
 
         px_l1 = wx + math.cos(rad_perp) * (claw_spread / 2)

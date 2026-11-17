@@ -4,10 +4,10 @@
 // ==========================================
 
 const state = {
-    1: 90, // Shoulder
-    2: 90, // Elbow
-    3: 90, // Claw
-    4: 90  // Base
+    1: 90, // Shoulder (SG90)
+    2: 90, // Elbow (SG90)
+    3: 90, // Claw (SG90)
+    4: 0   // Base virtual heading angle in degrees (0° = center/forward)
 };
 
 let sendTimers = {};
@@ -37,101 +37,146 @@ function setConnected(connected, connecting = false) {
 
 // ==========================================
 // UPDATE ROBOTIC ARM VISUALIZER
+// Matches Python GUI Kinematics, Pose & Rotating Base Arrow
 // ==========================================
 
 function updateVisualizer() {
-    // Shoulder rotation (matches Python 2D visualizer)
-    const sAngle = (state[1] - 90) * 0.8;
+    const bx = 160;
+    const by = 176;
+    const L1 = 60;
+    const L2 = 50;
+    const CLAW_LEN = 16;
+    const LEAN_DEG = 35;
+    const ELBOW_BEND_DEG = 20;
 
-    // Elbow rotation
-    const eAngle = (state[2] - 90) * 0.8;
+    const shoulder_deg = (state[1] - 90) * 0.8;
+    const elbow_deg = (state[2] - 90) * 0.8;
+    // Invert claw for gripper: 180 - state[3]
+    const claw_servo = 180 - state[3];
+    const claw_spread = Math.max(3, Math.min(24, (180 - claw_servo) * 0.13));
 
-    // Claw opening / closing
-    const clawSpread = Math.max(2, Math.min(22, (180 - state[3]) * 0.12));
+    // Upper arm kinematics
+    const rad_s = (-90 + LEAN_DEG + shoulder_deg) * Math.PI / 180;
+    const ex = bx + L1 * Math.cos(rad_s);
+    const ey = by + L1 * Math.sin(rad_s);
 
-    // Get SVG elements
-    const shoulderGroup = document.getElementById('arm-shoulder-group');
-    const elbowGroup = document.getElementById('arm-elbow-group');
-    const baseText = document.getElementById('svg-base-text');
+    // Forearm kinematics
+    const rad_e = rad_s + (ELBOW_BEND_DEG + elbow_deg) * Math.PI / 180;
+    const wx = ex + L2 * Math.cos(rad_e);
+    const wy = ey + L2 * Math.sin(rad_e);
+
+    // Claw dual-finger pincers kinematics
+    const rad_perp = rad_e + Math.PI / 2;
+    const px_l1 = wx + Math.cos(rad_perp) * (claw_spread / 2);
+    const py_l1 = wy + Math.sin(rad_perp) * (claw_spread / 2);
+    const px_l2 = px_l1 + Math.cos(rad_e) * CLAW_LEN;
+    const py_l2 = py_l1 + Math.sin(rad_e) * CLAW_LEN;
+
+    const px_r1 = wx - Math.cos(rad_perp) * (claw_spread / 2);
+    const py_r1 = wy - Math.sin(rad_perp) * (claw_spread / 2);
+    const px_r2 = px_r1 + Math.cos(rad_e) * CLAW_LEN;
+    const py_r2 = py_r1 + Math.sin(rad_e) * CLAW_LEN;
+
+    // Update Upper Arm Link
+    const upperArm = document.getElementById('svg-upper-arm');
+    if (upperArm) {
+        upperArm.setAttribute('x1', bx);
+        upperArm.setAttribute('y1', by);
+        upperArm.setAttribute('x2', ex.toFixed(1));
+        upperArm.setAttribute('y2', ey.toFixed(1));
+    }
+
+    // Update Shoulder Joint Circle
+    const shoulderJoint = document.getElementById('svg-shoulder-joint');
+    if (shoulderJoint) {
+        shoulderJoint.setAttribute('cx', bx);
+        shoulderJoint.setAttribute('cy', by);
+    }
+
+    // Update Forearm Link
+    const forearm = document.getElementById('svg-forearm');
+    if (forearm) {
+        forearm.setAttribute('x1', ex.toFixed(1));
+        forearm.setAttribute('y1', ey.toFixed(1));
+        forearm.setAttribute('x2', wx.toFixed(1));
+        forearm.setAttribute('y2', wy.toFixed(1));
+    }
+
+    // Update Elbow Joint Circle
+    const elbowJoint = document.getElementById('svg-elbow-joint');
+    if (elbowJoint) {
+        elbowJoint.setAttribute('cx', ex.toFixed(1));
+        elbowJoint.setAttribute('cy', ey.toFixed(1));
+    }
+
+    // Update Wrist Joint Circle
+    const wristJoint = document.getElementById('svg-wrist-joint');
+    if (wristJoint) {
+        wristJoint.setAttribute('cx', wx.toFixed(1));
+        wristJoint.setAttribute('cy', wy.toFixed(1));
+    }
+
+    // Update Left Claw Pincer
     const clawL = document.getElementById('svg-claw-l');
-    const clawR = document.getElementById('svg-claw-r');
-
-    // Update shoulder
-    if (shoulderGroup) {
-        shoulderGroup.setAttribute('transform', `translate(160, 145) rotate(${sAngle})`);
-    }
-
-    // Update elbow
-    if (elbowGroup) {
-        elbowGroup.setAttribute('transform', `translate(0, -55) rotate(${eAngle})`);
-    }
-
-    // Update base angle display
-    if (baseText) {
-        baseText.textContent = `${state[4]}°`;
-    }
-
-    // Update left claw pincer
     if (clawL) {
-        clawL.setAttribute('x2', -clawSpread);
-        clawL.setAttribute('y2', -14);
+        clawL.setAttribute('points', `${wx.toFixed(1)},${wy.toFixed(1)} ${px_l1.toFixed(1)},${py_l1.toFixed(1)} ${px_l2.toFixed(1)},${py_l2.toFixed(1)}`);
     }
 
-    // Update right claw pincer
+    // Update Right Claw Pincer
+    const clawR = document.getElementById('svg-claw-r');
     if (clawR) {
-        clawR.setAttribute('x2', clawSpread);
-        clawR.setAttribute('y2', -14);
+        clawR.setAttribute('points', `${wx.toFixed(1)},${wy.toFixed(1)} ${px_r1.toFixed(1)},${py_r1.toFixed(1)} ${px_r2.toFixed(1)},${py_r2.toFixed(1)}`);
+    }
+
+    // Update Base Direction Arrow & Readout Text
+    const baseArrow = document.getElementById('svg-base-arrow');
+    const baseText = document.getElementById('svg-base-text');
+    const baseAngle = state[4] || 0;
+    const normAngle = ((Math.round(baseAngle) + 180) % 360) - 180;
+
+    if (baseArrow) {
+        baseArrow.setAttribute('transform', `rotate(${normAngle}, ${bx}, ${by})`);
+    }
+
+    if (baseText) {
+        if (normAngle === 0) {
+            baseText.textContent = 'BASE: 0° [CENTER]';
+        } else if (normAngle < 0) {
+            baseText.textContent = `BASE: ◀ ${Math.abs(normAngle)}° LEFT`;
+        } else {
+            baseText.textContent = `BASE: ${normAngle}° RIGHT ▶`;
+        }
     }
 }
 
 // ==========================================
-// SET SERVO POSITION
+// SET SERVO POSITION (JOINTS 1-3)
 // ==========================================
 
 function setJoint(servoId, value, sendToServer = true) {
-    // Restrict servo angle between 0 and 180
     value = Math.max(0, Math.min(180, parseInt(value)));
-
-    // Update local servo state
     state[servoId] = value;
 
-    // Get slider and angle badge
     const slider = document.getElementById('slider' + servoId);
     const valBadge = document.getElementById('val' + servoId);
 
-    // Update slider position
-    if (slider) {
-        slider.value = value;
-    }
+    if (slider) slider.value = value;
+    if (valBadge) valBadge.textContent = value + '°';
 
-    // Update displayed angle
-    if (valBadge) {
-        valBadge.textContent = value + '°';
-    }
-
-    // Update SVG visualizer
     updateVisualizer();
 
-    if (!sendToServer) {
-        return;
-    }
+    if (!sendToServer) return;
 
-    // Debounce HTTP requests (30ms)
     clearTimeout(sendTimers[servoId]);
     sendTimers[servoId] = setTimeout(() => {
         fetch(`/api/set?s=${servoId}&v=${value}`)
-            .then(res => {
-                if (res.ok) setConnected(true);
-            })
-            .catch(e => {
-                console.warn('Fetch error:', e);
-                setConnected(false);
-            });
+            .then(res => { if (res.ok) setConnected(true); })
+            .catch(e => { console.warn('Fetch error:', e); setConnected(false); });
     }, 30);
 }
 
 // ==========================================
-// SLIDER CONTROL
+// SLIDER CONTROL (CLAW)
 // ==========================================
 
 function onSlider(servoId, value) {
@@ -147,11 +192,43 @@ function stepServo(servoId, delta) {
 }
 
 // ==========================================
+// TWO-BUTTON HOLD-TO-MOVE (SHOULDER & ELBOW)
+// ==========================================
+
+let jointHoldTimer = null;
+let jointHoldRepeat = null;
+
+function startJointHold(jointId, dir) {
+    // Immediate step
+    stepServo(jointId, dir * 5);
+
+    stopJointHold();
+    // Start smooth continuous stepping after 280ms hold
+    jointHoldTimer = setTimeout(() => {
+        jointHoldRepeat = setInterval(() => {
+            stepServo(jointId, dir * 2);
+        }, 50);
+    }, 280);
+}
+
+function stopJointHold() {
+    if (jointHoldTimer) {
+        clearTimeout(jointHoldTimer);
+        jointHoldTimer = null;
+    }
+    if (jointHoldRepeat) {
+        clearInterval(jointHoldRepeat);
+        jointHoldRepeat = null;
+    }
+}
+
+// ==========================================
 // BASE CONTINUOUS JOG & STEP CONTROLS
 // ==========================================
 
 let currentJogSpeed = 200;
 let jogKeepAliveTimer = null;
+let baseJogInterval = null;
 let activeJogDir = 0;
 
 function setJogSpeed(spd) {
@@ -193,6 +270,13 @@ function startJog(dir) {
     const activeBtn = document.getElementById(dir > 0 ? 'btn-jog-cw' : 'btn-jog-ccw');
     if (activeBtn) activeBtn.classList.add('active');
 
+    // Smoothly rotate the base angle & arrow while button is held
+    clearInterval(baseJogInterval);
+    baseJogInterval = setInterval(() => {
+        state[4] = ((state[4] + (dir > 0 ? 3 : -3) + 180) % 360) - 180;
+        updateVisualizer();
+    }, 45);
+
     // Send initial jog command
     fetch(`/api/jog?dir=${dirStr}&speed=${currentJogSpeed}`)
         .then(res => { if (res.ok) setConnected(true); })
@@ -208,14 +292,17 @@ function startJog(dir) {
 }
 
 function stopJog() {
-    if (activeJogDir === 0 && !jogKeepAliveTimer) return;
+    if (activeJogDir === 0 && !jogKeepAliveTimer && !baseJogInterval) return;
     activeJogDir = 0;
     clearInterval(jogKeepAliveTimer);
     jogKeepAliveTimer = null;
+    clearInterval(baseJogInterval);
+    baseJogInterval = null;
 
     document.getElementById('btn-jog-cw')?.classList.remove('active');
     document.getElementById('btn-jog-ccw')?.classList.remove('active');
     updateBaseBadge('STOPPED', false);
+    updateVisualizer();
 
     fetch('/api/jog?dir=STOP')
         .then(res => { if (res.ok) setConnected(true); })
@@ -224,6 +311,9 @@ function stopJog() {
 
 function nudgeBase(dir, ms) {
     const dirStr = (dir > 0) ? 'CW' : 'CCW';
+    const angleDelta = (ms >= 150 ? 14 : 6) * (dir > 0 ? 1 : -1);
+    state[4] = ((state[4] + angleDelta + 180) % 360) - 180;
+    updateVisualizer();
     updateBaseBadge(dir > 0 ? `CW (${ms}ms) ▶` : `◀ CCW (${ms}ms)`, true);
 
     fetch(`/api/step?dir=${dirStr}&ms=${ms}&speed=${currentJogSpeed}`)
@@ -248,18 +338,16 @@ function stopBaseCmd() {
     activeJogDir = 0;
     clearInterval(jogKeepAliveTimer);
     jogKeepAliveTimer = null;
+    clearInterval(baseJogInterval);
+    baseJogInterval = null;
+
     document.getElementById('btn-jog-cw')?.classList.remove('active');
     document.getElementById('btn-jog-ccw')?.classList.remove('active');
     updateBaseBadge('STOPPED', false);
 
     fetch('/api/stop')
-        .then(res => {
-            if (res.ok) setConnected(true);
-        })
-        .catch(e => {
-            console.warn(e);
-            setConnected(false);
-        });
+        .then(res => { if (res.ok) setConnected(true); })
+        .catch(e => { console.warn(e); setConnected(false); });
 }
 
 // ==========================================
@@ -267,7 +355,7 @@ function stopBaseCmd() {
 // ==========================================
 
 function resetAllCmd() {
-    applyPreset(90, 90, 90, 90);
+    applyPreset(90, 90, 90, 0);
 
     fetch('/api/reset')
         .then(res => {
@@ -288,7 +376,9 @@ function applyPreset(s1, s2, s3, s4) {
     setJoint(1, s1, true);
     setJoint(2, s2, true);
     setJoint(3, s3, true);
+    state[4] = s4;
     stopJog();
+    updateVisualizer();
 }
 
 // ==========================================
@@ -301,9 +391,7 @@ function syncStatus() {
 
     fetch('/api/status')
         .then(res => {
-            if (!res.ok) {
-                throw new Error('Status request failed');
-            }
+            if (!res.ok) throw new Error('Status request failed');
             return res.json();
         })
         .then(data => {
@@ -330,7 +418,8 @@ function syncStatus() {
         });
 }
 
-// Initial synchronization and periodic poll (every 3 seconds)
+// Initial visualizer render and status sync
+updateVisualizer();
 setConnected(false, true);
 syncStatus();
 setInterval(syncStatus, 3000);

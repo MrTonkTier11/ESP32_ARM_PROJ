@@ -41,13 +41,13 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
         <span class="ip-text" id="ip-text">192.168.4.1</span>
     </div>
 
-    <!-- ROBOTIC ARM VISUALIZER -->
+    <!-- ROBOTIC ARM VISUALIZER (Matches Python GUI Live View) -->
     <div class="visualizer-card">
         <div class="visualizer-title">
             Live Joint Mimic Pose
         </div>
 
-        <svg class="arm-svg" viewBox="0 0 320 160">
+        <svg class="arm-svg" viewBox="0 0 320 220" id="arm-visualizer-svg">
             <defs>
                 <linearGradient id="armGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                     <stop offset="0%" stop-color="#00d9ff" />
@@ -55,29 +55,34 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
                 </linearGradient>
             </defs>
 
-            <!-- BASE PLATFORM -->
-            <rect x="120" y="145" width="80" height="12" rx="4" fill="#23304c" stroke="#3b4d75" stroke-width="1.5" />
-            <circle cx="160" cy="145" r="14" fill="#151c2e" stroke="#00d9ff" stroke-width="2" />
-            <text x="160" y="149" fill="#00d9ff" font-size="8" font-weight="bold" text-anchor="middle" id="svg-base-text">90°</text>
+            <!-- BASE PLATFORM PEDESTAL -->
+            <rect x="100" y="174" width="120" height="18" rx="4" fill="#151d2d" stroke="#25324d" stroke-width="2" />
+            <rect x="90" y="188" width="140" height="8" rx="2" fill="#0f1624" stroke="#1c263a" stroke-width="1" />
+            <ellipse cx="160" cy="176" rx="32" ry="14" fill="#0c121e" stroke="#25324d" stroke-width="2" />
+            <ellipse cx="160" cy="176" rx="26" ry="10" fill="#131c2c" stroke="#1f2d45" stroke-width="1" />
 
-            <!-- SHOULDER GROUP -->
-            <g id="arm-shoulder-group" transform="translate(160, 145) rotate(0)">
-                <line x1="0" y1="0" x2="0" y2="-55" stroke="url(#armGrad)" stroke-width="7" stroke-linecap="round" />
-                <circle cx="0" cy="0" r="6" fill="#fff" stroke="#00d9ff" stroke-width="2" />
-
-                <!-- ELBOW GROUP -->
-                <g id="arm-elbow-group" transform="translate(0, -55) rotate(0)">
-                    <line x1="0" y1="0" x2="0" y2="-45" stroke="url(#armGrad)" stroke-width="5" stroke-linecap="round" />
-                    <circle cx="0" cy="0" r="5" fill="#fff" stroke="#0066ff" stroke-width="2" />
-
-                    <!-- CLAW GROUP -->
-                    <g id="arm-claw-group" transform="translate(0, -45)">
-                        <circle cx="0" cy="0" r="4" fill="#ffd54f" />
-                        <line id="svg-claw-l" x1="0" y1="0" x2="-10" y2="-14" stroke="#ffd54f" stroke-width="3" stroke-linecap="round" />
-                        <line id="svg-claw-r" x1="0" y1="0" x2="10" y2="-14" stroke="#ffd54f" stroke-width="3" stroke-linecap="round" />
-                    </g>
-                </g>
+            <!-- BASE DIRECTION ARROW (Rotates with base angle) -->
+            <g id="svg-base-arrow" transform="rotate(0, 160, 176)">
+                <line x1="160" y1="176" x2="160" y2="154" stroke="#00d9ff" stroke-width="3" stroke-linecap="round" />
+                <polygon points="160,148 154,157 160,154 166,157" fill="#00d9ff" stroke="#ffffff" stroke-width="1" />
+                <circle cx="160" cy="176" r="4" fill="#ffffff" stroke="#00d9ff" stroke-width="2" />
             </g>
+
+            <!-- BASE DIRECTION READOUT TEXT -->
+            <text id="svg-base-text" x="160" y="210" fill="#00d9ff" font-size="9" font-weight="bold" text-anchor="middle">BASE: 0° [CENTER]</text>
+
+            <!-- UPPER ARM LINK (SHOULDER) -->
+            <line id="svg-upper-arm" x1="160" y1="176" x2="194" y2="127" stroke="#00b0ff" stroke-width="7" stroke-linecap="round" />
+            <circle id="svg-shoulder-joint" cx="160" cy="176" r="6" fill="#ffffff" stroke="#00d9ff" stroke-width="2" />
+
+            <!-- FOREARM LINK (ELBOW) -->
+            <line id="svg-forearm" x1="194" y1="127" x2="238" y2="103" stroke="#2979ff" stroke-width="5" stroke-linecap="round" />
+            <circle id="svg-elbow-joint" cx="194" cy="127" r="5" fill="#ffffff" stroke="#00b0ff" stroke-width="2" />
+
+            <!-- WRIST & CLAW PINCERS -->
+            <circle id="svg-wrist-joint" cx="238" cy="103" r="4" fill="#ffd54f" stroke="#ffab00" stroke-width="1" />
+            <polyline id="svg-claw-l" points="238,103 238,97 252,97" stroke="#ffd54f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+            <polyline id="svg-claw-r" points="238,103 238,109 252,109" stroke="#ffd54f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" />
         </svg>
     </div>
 
@@ -88,7 +93,7 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
                 <div class="joint-name">↺ BASE ROTATION</div>
                 <div class="joint-type">MG90S 360° Continuous · GPIO 21</div>
             </div>
-            <div class="angle-badge" id="val4" style="min-width: 80px; font-size: 0.9rem;">STOPPED</div>
+            <div class="angle-badge" id="val4" style="min-width: 90px; font-size: 0.85rem;">STOPPED</div>
         </div>
 
         <!-- CONTINUOUS JOG BUTTONS (HOLD TO ROTATE) -->
@@ -126,29 +131,29 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
         </div>
     </div>
 
-    <!-- JOINT 1: SHOULDER -->
+    <!-- JOINT 1: SHOULDER (TWO BUTTON CONTROL) -->
     <div class="joint-card">
         <div class="joint-header">
             <div>
                 <div class="joint-name">▲ SHOULDER JOINT</div>
-                <div class="joint-type">Servo 1 (SG90) · Main Arm Pitch</div>
+                <div class="joint-type">Servo 1 (SG90) · Main Arm Pitch · GPIO 4</div>
             </div>
             <div class="angle-badge" id="val1">90°</div>
         </div>
 
-        <div class="control-row">
-            <button class="arrow-btn" onclick="stepServo(1, -5)" title="Lower Arm">
-                <span>▼</span>
-                <span class="arrow-sub">DOWN</span>
+        <div class="jog-row">
+            <button class="btn-jog" id="btn-shoulder-down"
+                onpointerdown="startJointHold(1, -1)" onpointerup="stopJointHold()" onpointerleave="stopJointHold()"
+                title="Lower Arm">
+                <span>▼ LOWER ARM</span>
+                <span class="jog-sub">HOLD DOWN</span>
             </button>
 
-            <div class="slider-container">
-                <input type="range" id="slider1" min="0" max="180" value="90" oninput="onSlider(1, this.value)">
-            </div>
-
-            <button class="arrow-btn" onclick="stepServo(1, 5)" title="Raise Arm">
-                <span>▲</span>
-                <span class="arrow-sub">UP</span>
+            <button class="btn-jog" id="btn-shoulder-up"
+                onpointerdown="startJointHold(1, 1)" onpointerup="stopJointHold()" onpointerleave="stopJointHold()"
+                title="Raise Arm">
+                <span>RAISE ARM ▲</span>
+                <span class="jog-sub">HOLD UP</span>
             </button>
         </div>
 
@@ -160,29 +165,29 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
         </div>
     </div>
 
-    <!-- JOINT 2: ELBOW -->
+    <!-- JOINT 2: ELBOW (TWO BUTTON CONTROL) -->
     <div class="joint-card">
         <div class="joint-header">
             <div>
                 <div class="joint-name">↶ ELBOW JOINT</div>
-                <div class="joint-type">Servo 2 (SG90) · Forearm Pitch</div>
+                <div class="joint-type">Servo 2 (SG90) · Forearm Pitch · GPIO 18</div>
             </div>
             <div class="angle-badge" id="val2">90°</div>
         </div>
 
-        <div class="control-row">
-            <button class="arrow-btn" onclick="stepServo(2, -5)" title="Retract Forearm">
-                <span>↶</span>
-                <span class="arrow-sub">BACK</span>
+        <div class="jog-row">
+            <button class="btn-jog" id="btn-elbow-back"
+                onpointerdown="startJointHold(2, -1)" onpointerup="stopJointHold()" onpointerleave="stopJointHold()"
+                title="Retract Forearm">
+                <span>↶ RETRACT</span>
+                <span class="jog-sub">HOLD BACK</span>
             </button>
 
-            <div class="slider-container">
-                <input type="range" id="slider2" min="0" max="180" value="90" oninput="onSlider(2, this.value)">
-            </div>
-
-            <button class="arrow-btn" onclick="stepServo(2, 5)" title="Extend Forearm">
-                <span>↷</span>
-                <span class="arrow-sub">FWD</span>
+            <button class="btn-jog" id="btn-elbow-fwd"
+                onpointerdown="startJointHold(2, 1)" onpointerup="stopJointHold()" onpointerleave="stopJointHold()"
+                title="Extend Forearm">
+                <span>EXTEND ↷</span>
+                <span class="jog-sub">HOLD FWD</span>
             </button>
         </div>
 
@@ -194,12 +199,12 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
         </div>
     </div>
 
-    <!-- JOINT 3: CLAW -->
+    <!-- JOINT 3: CLAW / GRIPPER (SLIDER CONTROL) -->
     <div class="joint-card">
         <div class="joint-header">
             <div>
                 <div class="joint-name">🤏 CLAW / GRIPPER</div>
-                <div class="joint-type">Servo 3 (SG90) · Pincer Grip</div>
+                <div class="joint-type">Servo 3 (SG90) · Pincer Grip · GPIO 19</div>
             </div>
             <div class="angle-badge" id="val3">90°</div>
         </div>
@@ -230,10 +235,10 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
 
     <!-- PRESETS -->
     <div class="preset-panel">
-        <button class="btn-preset" onclick="applyPreset(90, 90, 90, 90)">🏠 HOME (90°)</button>
-        <button class="btn-preset" onclick="applyPreset(130, 45, 30, 90)">📦 PICK POSE</button>
-        <button class="btn-preset" onclick="applyPreset(70, 110, 150, 140)">📍 DROP POSE</button>
-        <button class="btn-preset" onclick="applyPreset(45, 135, 90, 90)">💤 REST / FOLD</button>
+        <button class="btn-preset" onclick="applyPreset(90, 90, 90, 0)">🏠 HOME (90°)</button>
+        <button class="btn-preset" onclick="applyPreset(130, 45, 30, 0)">📦 PICK POSE</button>
+        <button class="btn-preset" onclick="applyPreset(70, 110, 150, 45)">📍 DROP POSE</button>
+        <button class="btn-preset" onclick="applyPreset(45, 135, 90, 0)">💤 REST / FOLD</button>
     </div>
 
     <!-- GLOBAL CONTROLS -->
@@ -370,7 +375,7 @@ h1 {
 svg.arm-svg {
     width: 100%;
     max-width: 320px;
-    height: 160px;
+    height: 220px;
 }
 
 /* JOINT CARD */
@@ -727,10 +732,10 @@ static const char SCRIPT_JS[] PROGMEM = R"rawliteral(
 // ==========================================
 
 const state = {
-    1: 90, // Shoulder
-    2: 90, // Elbow
-    3: 90, // Claw
-    4: 90  // Base
+    1: 90, // Shoulder (SG90)
+    2: 90, // Elbow (SG90)
+    3: 90, // Claw (SG90)
+    4: 0   // Base virtual heading angle in degrees (0° = center/forward)
 };
 
 let sendTimers = {};
@@ -760,101 +765,146 @@ function setConnected(connected, connecting = false) {
 
 // ==========================================
 // UPDATE ROBOTIC ARM VISUALIZER
+// Matches Python GUI Kinematics, Pose & Rotating Base Arrow
 // ==========================================
 
 function updateVisualizer() {
-    // Shoulder rotation (matches Python 2D visualizer)
-    const sAngle = (state[1] - 90) * 0.8;
+    const bx = 160;
+    const by = 176;
+    const L1 = 60;
+    const L2 = 50;
+    const CLAW_LEN = 16;
+    const LEAN_DEG = 35;
+    const ELBOW_BEND_DEG = 20;
 
-    // Elbow rotation
-    const eAngle = (state[2] - 90) * 0.8;
+    const shoulder_deg = (state[1] - 90) * 0.8;
+    const elbow_deg = (state[2] - 90) * 0.8;
+    // Invert claw for gripper: 180 - state[3]
+    const claw_servo = 180 - state[3];
+    const claw_spread = Math.max(3, Math.min(24, (180 - claw_servo) * 0.13));
 
-    // Claw opening / closing
-    const clawSpread = Math.max(2, Math.min(22, (180 - state[3]) * 0.12));
+    // Upper arm kinematics
+    const rad_s = (-90 + LEAN_DEG + shoulder_deg) * Math.PI / 180;
+    const ex = bx + L1 * Math.cos(rad_s);
+    const ey = by + L1 * Math.sin(rad_s);
 
-    // Get SVG elements
-    const shoulderGroup = document.getElementById('arm-shoulder-group');
-    const elbowGroup = document.getElementById('arm-elbow-group');
-    const baseText = document.getElementById('svg-base-text');
+    // Forearm kinematics
+    const rad_e = rad_s + (ELBOW_BEND_DEG + elbow_deg) * Math.PI / 180;
+    const wx = ex + L2 * Math.cos(rad_e);
+    const wy = ey + L2 * Math.sin(rad_e);
+
+    // Claw dual-finger pincers kinematics
+    const rad_perp = rad_e + Math.PI / 2;
+    const px_l1 = wx + Math.cos(rad_perp) * (claw_spread / 2);
+    const py_l1 = wy + Math.sin(rad_perp) * (claw_spread / 2);
+    const px_l2 = px_l1 + Math.cos(rad_e) * CLAW_LEN;
+    const py_l2 = py_l1 + Math.sin(rad_e) * CLAW_LEN;
+
+    const px_r1 = wx - Math.cos(rad_perp) * (claw_spread / 2);
+    const py_r1 = wy - Math.sin(rad_perp) * (claw_spread / 2);
+    const px_r2 = px_r1 + Math.cos(rad_e) * CLAW_LEN;
+    const py_r2 = py_r1 + Math.sin(rad_e) * CLAW_LEN;
+
+    // Update Upper Arm Link
+    const upperArm = document.getElementById('svg-upper-arm');
+    if (upperArm) {
+        upperArm.setAttribute('x1', bx);
+        upperArm.setAttribute('y1', by);
+        upperArm.setAttribute('x2', ex.toFixed(1));
+        upperArm.setAttribute('y2', ey.toFixed(1));
+    }
+
+    // Update Shoulder Joint Circle
+    const shoulderJoint = document.getElementById('svg-shoulder-joint');
+    if (shoulderJoint) {
+        shoulderJoint.setAttribute('cx', bx);
+        shoulderJoint.setAttribute('cy', by);
+    }
+
+    // Update Forearm Link
+    const forearm = document.getElementById('svg-forearm');
+    if (forearm) {
+        forearm.setAttribute('x1', ex.toFixed(1));
+        forearm.setAttribute('y1', ey.toFixed(1));
+        forearm.setAttribute('x2', wx.toFixed(1));
+        forearm.setAttribute('y2', wy.toFixed(1));
+    }
+
+    // Update Elbow Joint Circle
+    const elbowJoint = document.getElementById('svg-elbow-joint');
+    if (elbowJoint) {
+        elbowJoint.setAttribute('cx', ex.toFixed(1));
+        elbowJoint.setAttribute('cy', ey.toFixed(1));
+    }
+
+    // Update Wrist Joint Circle
+    const wristJoint = document.getElementById('svg-wrist-joint');
+    if (wristJoint) {
+        wristJoint.setAttribute('cx', wx.toFixed(1));
+        wristJoint.setAttribute('cy', wy.toFixed(1));
+    }
+
+    // Update Left Claw Pincer
     const clawL = document.getElementById('svg-claw-l');
-    const clawR = document.getElementById('svg-claw-r');
-
-    // Update shoulder
-    if (shoulderGroup) {
-        shoulderGroup.setAttribute('transform', `translate(160, 145) rotate(${sAngle})`);
-    }
-
-    // Update elbow
-    if (elbowGroup) {
-        elbowGroup.setAttribute('transform', `translate(0, -55) rotate(${eAngle})`);
-    }
-
-    // Update base angle display
-    if (baseText) {
-        baseText.textContent = `${state[4]}°`;
-    }
-
-    // Update left claw pincer
     if (clawL) {
-        clawL.setAttribute('x2', -clawSpread);
-        clawL.setAttribute('y2', -14);
+        clawL.setAttribute('points', `${wx.toFixed(1)},${wy.toFixed(1)} ${px_l1.toFixed(1)},${py_l1.toFixed(1)} ${px_l2.toFixed(1)},${py_l2.toFixed(1)}`);
     }
 
-    // Update right claw pincer
+    // Update Right Claw Pincer
+    const clawR = document.getElementById('svg-claw-r');
     if (clawR) {
-        clawR.setAttribute('x2', clawSpread);
-        clawR.setAttribute('y2', -14);
+        clawR.setAttribute('points', `${wx.toFixed(1)},${wy.toFixed(1)} ${px_r1.toFixed(1)},${py_r1.toFixed(1)} ${px_r2.toFixed(1)},${py_r2.toFixed(1)}`);
+    }
+
+    // Update Base Direction Arrow & Readout Text
+    const baseArrow = document.getElementById('svg-base-arrow');
+    const baseText = document.getElementById('svg-base-text');
+    const baseAngle = state[4] || 0;
+    const normAngle = ((Math.round(baseAngle) + 180) % 360) - 180;
+
+    if (baseArrow) {
+        baseArrow.setAttribute('transform', `rotate(${normAngle}, ${bx}, ${by})`);
+    }
+
+    if (baseText) {
+        if (normAngle === 0) {
+            baseText.textContent = 'BASE: 0° [CENTER]';
+        } else if (normAngle < 0) {
+            baseText.textContent = `BASE: ◀ ${Math.abs(normAngle)}° LEFT`;
+        } else {
+            baseText.textContent = `BASE: ${normAngle}° RIGHT ▶`;
+        }
     }
 }
 
 // ==========================================
-// SET SERVO POSITION
+// SET SERVO POSITION (JOINTS 1-3)
 // ==========================================
 
 function setJoint(servoId, value, sendToServer = true) {
-    // Restrict servo angle between 0 and 180
     value = Math.max(0, Math.min(180, parseInt(value)));
-
-    // Update local servo state
     state[servoId] = value;
 
-    // Get slider and angle badge
     const slider = document.getElementById('slider' + servoId);
     const valBadge = document.getElementById('val' + servoId);
 
-    // Update slider position
-    if (slider) {
-        slider.value = value;
-    }
+    if (slider) slider.value = value;
+    if (valBadge) valBadge.textContent = value + '°';
 
-    // Update displayed angle
-    if (valBadge) {
-        valBadge.textContent = value + '°';
-    }
-
-    // Update SVG visualizer
     updateVisualizer();
 
-    if (!sendToServer) {
-        return;
-    }
+    if (!sendToServer) return;
 
-    // Debounce HTTP requests (30ms)
     clearTimeout(sendTimers[servoId]);
     sendTimers[servoId] = setTimeout(() => {
         fetch(`/api/set?s=${servoId}&v=${value}`)
-            .then(res => {
-                if (res.ok) setConnected(true);
-            })
-            .catch(e => {
-                console.warn('Fetch error:', e);
-                setConnected(false);
-            });
+            .then(res => { if (res.ok) setConnected(true); })
+            .catch(e => { console.warn('Fetch error:', e); setConnected(false); });
     }, 30);
 }
 
 // ==========================================
-// SLIDER CONTROL
+// SLIDER CONTROL (CLAW)
 // ==========================================
 
 function onSlider(servoId, value) {
@@ -870,11 +920,43 @@ function stepServo(servoId, delta) {
 }
 
 // ==========================================
+// TWO-BUTTON HOLD-TO-MOVE (SHOULDER & ELBOW)
+// ==========================================
+
+let jointHoldTimer = null;
+let jointHoldRepeat = null;
+
+function startJointHold(jointId, dir) {
+    // Immediate step
+    stepServo(jointId, dir * 5);
+
+    stopJointHold();
+    // Start smooth continuous stepping after 280ms hold
+    jointHoldTimer = setTimeout(() => {
+        jointHoldRepeat = setInterval(() => {
+            stepServo(jointId, dir * 2);
+        }, 50);
+    }, 280);
+}
+
+function stopJointHold() {
+    if (jointHoldTimer) {
+        clearTimeout(jointHoldTimer);
+        jointHoldTimer = null;
+    }
+    if (jointHoldRepeat) {
+        clearInterval(jointHoldRepeat);
+        jointHoldRepeat = null;
+    }
+}
+
+// ==========================================
 // BASE CONTINUOUS JOG & STEP CONTROLS
 // ==========================================
 
 let currentJogSpeed = 200;
 let jogKeepAliveTimer = null;
+let baseJogInterval = null;
 let activeJogDir = 0;
 
 function setJogSpeed(spd) {
@@ -916,6 +998,13 @@ function startJog(dir) {
     const activeBtn = document.getElementById(dir > 0 ? 'btn-jog-cw' : 'btn-jog-ccw');
     if (activeBtn) activeBtn.classList.add('active');
 
+    // Smoothly rotate the base angle & arrow while button is held
+    clearInterval(baseJogInterval);
+    baseJogInterval = setInterval(() => {
+        state[4] = ((state[4] + (dir > 0 ? 3 : -3) + 180) % 360) - 180;
+        updateVisualizer();
+    }, 45);
+
     // Send initial jog command
     fetch(`/api/jog?dir=${dirStr}&speed=${currentJogSpeed}`)
         .then(res => { if (res.ok) setConnected(true); })
@@ -931,14 +1020,17 @@ function startJog(dir) {
 }
 
 function stopJog() {
-    if (activeJogDir === 0 && !jogKeepAliveTimer) return;
+    if (activeJogDir === 0 && !jogKeepAliveTimer && !baseJogInterval) return;
     activeJogDir = 0;
     clearInterval(jogKeepAliveTimer);
     jogKeepAliveTimer = null;
+    clearInterval(baseJogInterval);
+    baseJogInterval = null;
 
     document.getElementById('btn-jog-cw')?.classList.remove('active');
     document.getElementById('btn-jog-ccw')?.classList.remove('active');
     updateBaseBadge('STOPPED', false);
+    updateVisualizer();
 
     fetch('/api/jog?dir=STOP')
         .then(res => { if (res.ok) setConnected(true); })
@@ -947,6 +1039,9 @@ function stopJog() {
 
 function nudgeBase(dir, ms) {
     const dirStr = (dir > 0) ? 'CW' : 'CCW';
+    const angleDelta = (ms >= 150 ? 14 : 6) * (dir > 0 ? 1 : -1);
+    state[4] = ((state[4] + angleDelta + 180) % 360) - 180;
+    updateVisualizer();
     updateBaseBadge(dir > 0 ? `CW (${ms}ms) ▶` : `◀ CCW (${ms}ms)`, true);
 
     fetch(`/api/step?dir=${dirStr}&ms=${ms}&speed=${currentJogSpeed}`)
@@ -971,18 +1066,16 @@ function stopBaseCmd() {
     activeJogDir = 0;
     clearInterval(jogKeepAliveTimer);
     jogKeepAliveTimer = null;
+    clearInterval(baseJogInterval);
+    baseJogInterval = null;
+
     document.getElementById('btn-jog-cw')?.classList.remove('active');
     document.getElementById('btn-jog-ccw')?.classList.remove('active');
     updateBaseBadge('STOPPED', false);
 
     fetch('/api/stop')
-        .then(res => {
-            if (res.ok) setConnected(true);
-        })
-        .catch(e => {
-            console.warn(e);
-            setConnected(false);
-        });
+        .then(res => { if (res.ok) setConnected(true); })
+        .catch(e => { console.warn(e); setConnected(false); });
 }
 
 // ==========================================
@@ -990,7 +1083,7 @@ function stopBaseCmd() {
 // ==========================================
 
 function resetAllCmd() {
-    applyPreset(90, 90, 90, 90);
+    applyPreset(90, 90, 90, 0);
 
     fetch('/api/reset')
         .then(res => {
@@ -1011,7 +1104,9 @@ function applyPreset(s1, s2, s3, s4) {
     setJoint(1, s1, true);
     setJoint(2, s2, true);
     setJoint(3, s3, true);
+    state[4] = s4;
     stopJog();
+    updateVisualizer();
 }
 
 // ==========================================
@@ -1024,9 +1119,7 @@ function syncStatus() {
 
     fetch('/api/status')
         .then(res => {
-            if (!res.ok) {
-                throw new Error('Status request failed');
-            }
+            if (!res.ok) throw new Error('Status request failed');
             return res.json();
         })
         .then(data => {
@@ -1053,7 +1146,8 @@ function syncStatus() {
         });
 }
 
-// Initial synchronization and periodic poll (every 3 seconds)
+// Initial visualizer render and status sync
+updateVisualizer();
 setConnected(false, true);
 syncStatus();
 setInterval(syncStatus, 3000);
