@@ -15,8 +15,8 @@ from status_bar import StatusBar
 
 class RoboticArmApp:
     REST_POSE = (45, 135, 90, 0)        # shoulder, elbow, claw, base (degrees)
-    CENTER_POSE = (90, 90, 90, 0)       # shoulder 90°, elbow 90°, claw 90°, base 0° (center)
-    SEND_DEBOUNCE_MS = 35
+    CENTER_POSE = (45, 135, 90, 0)       # shoulder 90°, elbow 90°, claw 90°, base 0° (center)
+    SEND_DEBOUNCE_MS = 50
 
     def __init__(self, root):
         self.root = root
@@ -221,8 +221,8 @@ class RoboticArmApp:
     def reset_all_controls(self):
         self.stop_jog_base()
         self.state.set(4, 0)
-        self.set_joint_val(1, 90)
-        self.set_joint_val(2, 90)
+        self.set_joint_val(1, 45)
+        self.set_joint_val(2, 135)
         self.set_joint_val(3, 90)
         self.comm.send("RESET")
         self.joints_panel.update_badge(4, "STOPPED", is_active=False)
