@@ -11,12 +11,12 @@ from connection_bar import ConnectionBar
 from joints_panel import JointsPanel
 from side_panel import SidePanel
 from status_bar import StatusBar
+from servo_easer import ServoEaser
 
 
 class RoboticArmApp:
-    REST_POSE = (45, 135, 90, 0)        # shoulder, elbow, claw, base (degrees)
-    CENTER_POSE = (45, 135, 90, 0)       # shoulder 90°, elbow 90°, claw 90°, base 0° (center)
-    SEND_DEBOUNCE_MS = 50
+    # "RESET ALL JOINTS" moves to this pose (the old fold / rest pose)
+    RESET_POSE = (45, 135, 90, 0)        # shoulder, elbow, claw, base (degrees)
 
     def __init__(self, root):
         self.root = root
@@ -28,7 +28,6 @@ class RoboticArmApp:
         # Thread-safe UI event queue
         self.ui_queue = queue.Queue()
         self._suppress = False
-        self.pending_timers = {}
 
         # Base rotation jog state
         self.jog_speed = 200
@@ -43,6 +42,12 @@ class RoboticArmApp:
             log_callback=self.append_log,
             status_callback=self.update_status,
             disconnect_callback=lambda: self.ui_queue.put(self.conn_bar.show_disconnected),
+        )
+
+        # Smooth acceleration / deceleration for shoulder, elbow and claw
+        self.easer = ServoEaser(
+            root=self.root, state=self.state,
+            send_servo=self._send_servo, on_update=self._on_motion_update,
         )
 
         self._build_ui()
@@ -82,7 +87,6 @@ class RoboticArmApp:
 
         self.side_panel = SidePanel(
             main_split, self.state,
-            on_rest=lambda: self.apply_preset(*self.REST_POSE),
             on_reset=self.reset_all_controls,
             on_stop_base=self.stop_jog_base,
         )
@@ -106,23 +110,24 @@ class RoboticArmApp:
     # ---------- Joint & Servo Control ----------
     def sync_initial_positions(self):
         """Sends current GUI joint values to ESP32 upon connection."""
-        for j in (1, 2, 3):
-            self.comm.send(f"S{j},{self.state.to_servo(j, self.state.get(j))}")
+        self.easer.sync_all()
         self.comm.send("STOP4")
         self.append_log("[SYNC] Initialized positional servos 1-3 & halted Base motor.")
+
+    def _send_servo(self, joint_id, servo_angle, log):
+        """Called by the easer for every smoothed step (only the last one is logged)."""
+        self.comm.send(f"S{joint_id},{servo_angle}", log=log)
+
+    def _on_motion_update(self):
+        """After every easing step: keep the angle badges and the 2D arm in sync."""
+        for j in ServoEaser.JOINTS:
+            self.joints_panel.update_badge(j, round(self.state.shown(j)))
+        self.side_panel.visualizer.redraw()
 
     def on_slider_moved(self, joint_id, value):
         if self._suppress:
             return
-        val = int(float(value))
-        self.joints_panel.update_badge(joint_id, val)
-        self.side_panel.visualizer.redraw()
-
-        if joint_id in self.pending_timers:
-            self.root.after_cancel(self.pending_timers[joint_id])
-        self.pending_timers[joint_id] = self.root.after(
-            self.SEND_DEBOUNCE_MS, lambda j=joint_id, v=val: self.send_joint_command(j, v)
-        )
+        self.easer.set_target(joint_id, int(float(value)))
 
     def step_joint(self, joint_id, delta):
         self.set_joint_val(joint_id, self.state.get(joint_id) + delta)
@@ -130,24 +135,14 @@ class RoboticArmApp:
     def set_joint_val(self, joint_id, value):
         value = self.state.clamp(joint_id, value)
 
-        if joint_id in self.pending_timers:
-            self.root.after_cancel(self.pending_timers.pop(joint_id))
-
         self._suppress = True
         try:
             self.state.set(joint_id, value)
         finally:
             self._suppress = False
 
-        self.joints_panel.update_badge(joint_id, value)
-        self.side_panel.visualizer.redraw()
-        self.send_joint_command(joint_id, value)
-
-    def send_joint_command(self, joint_id, value):
-        self.pending_timers.pop(joint_id, None)
-        if joint_id in (1, 2, 3):
-            servo_pos = self.state.to_servo(joint_id, value)
-            self.comm.send(f"S{joint_id},{servo_pos}")
+        if joint_id in ServoEaser.JOINTS:
+            self.easer.set_target(joint_id, value)
 
     # ---------- Base Continuous Rotation Control (Matches HTML) ----------
     def start_jog_base(self, direction):
@@ -219,15 +214,11 @@ class RoboticArmApp:
 
     # ---------- Global Pose Controls ----------
     def reset_all_controls(self):
-        self.stop_jog_base()
-        self.state.set(4, 0)
-        self.set_joint_val(1, 45)
-        self.set_joint_val(2, 135)
-        self.set_joint_val(3, 90)
-        self.comm.send("RESET")
-        self.joints_panel.update_badge(4, "STOPPED", is_active=False)
-        self.side_panel.visualizer.redraw()
-        self.append_log("[RESET] Reset all servos to 90° & base heading to center (0°).")
+        """RESET ALL JOINTS = glide to the fold / rest pose (RESET_POSE)."""
+        s1, s2, s3, s4 = self.RESET_POSE
+        self.apply_preset(s1, s2, s3, s4)
+        self.append_log(f"[RESET] Fold/rest pose: shoulder {s1}°, elbow {s2}°, "
+                        f"claw {s3}°, base heading {s4}°.")
 
     def apply_preset(self, s1, s2, s3, s4):
         self.stop_jog_base()

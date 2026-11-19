@@ -34,9 +34,9 @@ class ArmVisualizer(tk.Canvas):
         bx = w // 2 - 16
         by = h - 44
 
-        shoulder_deg = (self.state.get(1) - 90) * 0.8
-        elbow_deg = (self.state.get(2) - 90) * 0.8
-        claw_servo = self.state.to_servo(3, self.state.get(3))
+        shoulder_deg = (self.state.shown(1) - 90) * 0.8
+        elbow_deg = (self.state.shown(2) - 90) * 0.8
+        claw_servo = self.state.to_servo(3, self.state.shown(3))
         claw_spread = max(3, min(24, (180 - claw_servo) * 0.13))
         base_angle = self.state.get(4)  # 0° = forward, negative = left, positive = right
 

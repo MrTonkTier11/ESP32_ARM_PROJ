@@ -133,7 +133,7 @@ class ConnectionManager:
                 sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
 
     # SEND
-    def send(self, command):
+    def send(self, command, log=True):
         if not self.is_connected:
             return False
 
@@ -146,7 +146,8 @@ class ConnectionManager:
                 self.tcp_socket.sendall(cmd_bytes)
             else:
                 return False
-            self.log_callback(f"TX: {command.strip()}")
+            if log:
+                self.log_callback(f"TX: {command.strip()}")
             return True
         except socket.timeout:
             self.log_callback("[WARN] Send timed out (ESP32 busy?).")

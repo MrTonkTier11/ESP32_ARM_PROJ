@@ -20,12 +20,22 @@ class ArmState:
 
     def __init__(self):
         self.vars = {j: tk.IntVar(value=self.DEFAULTS[j]) for j in self.JOINTS}
+        # Where each joint REALLY is right now. It glides toward the slider value
+        # (the target) - see servo_easer.py. Same units as the slider.
+        self.current = {j: float(self.DEFAULTS[j]) for j in self.JOINTS}
+
+    def shown(self, joint_id):
+        """Position to draw: eased position for joints 1-3, heading for the base."""
+        if joint_id == 4:
+            return self.get(4)
+        return self.current[joint_id]
 
     def to_servo(self, joint_id, value):
+        val = int(round(float(value)))
         if self.INVERTED.get(joint_id):
             lo, hi = self.RANGES[joint_id]
-            return lo + hi - int(value)
-        return int(value)
+            return lo + hi - val
+        return val
 
     def limits(self, joint_id):
         return self.RANGES[joint_id]

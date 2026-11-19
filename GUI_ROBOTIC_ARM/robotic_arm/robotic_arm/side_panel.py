@@ -8,7 +8,7 @@ from log_panel import LogPanel
 
 
 class SidePanel(tk.Frame):
-    def __init__(self, parent, state, on_rest, on_reset, on_stop_base):
+    def __init__(self, parent, state, on_reset, on_stop_base):
         super().__init__(parent, bg=CARD_BG, highlightbackground=CARD_BORDER,
                          highlightthickness=1, padx=12, pady=12, width=380)
         self.pack_propagate(False)
@@ -21,7 +21,7 @@ class SidePanel(tk.Frame):
         self.visualizer = ArmVisualizer(self, state)
         self.visualizer.pack(fill="x", pady=(0, 10))
 
-        ActionPanel(self, on_rest, on_reset, on_stop_base).pack(fill="x")
+        ActionPanel(self, on_reset, on_stop_base).pack(fill="x")
 
         self.log = LogPanel(self)
         self.log.pack(fill="both", expand=True)
