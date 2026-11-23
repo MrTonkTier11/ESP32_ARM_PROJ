@@ -72,17 +72,17 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
             <text id="svg-base-text" x="160" y="210" fill="#00d9ff" font-size="9" font-weight="bold" text-anchor="middle">BASE: 0° [CENTER]</text>
 
             <!-- UPPER ARM LINK (SHOULDER) -->
-            <line id="svg-upper-arm" x1="160" y1="176" x2="194" y2="127" stroke="#00b0ff" stroke-width="7" stroke-linecap="round" />
+            <line id="svg-upper-arm" x1="160" y1="176" x2="160" y2="116" stroke="#00b0ff" stroke-width="7" stroke-linecap="round" />
             <circle id="svg-shoulder-joint" cx="160" cy="176" r="6" fill="#ffffff" stroke="#00d9ff" stroke-width="2" />
 
             <!-- FOREARM LINK (ELBOW) -->
-            <line id="svg-forearm" x1="194" y1="127" x2="238" y2="103" stroke="#2979ff" stroke-width="5" stroke-linecap="round" />
-            <circle id="svg-elbow-joint" cx="194" cy="127" r="5" fill="#ffffff" stroke="#00b0ff" stroke-width="2" />
+            <line id="svg-forearm" x1="160" y1="116" x2="177" y2="69" stroke="#2979ff" stroke-width="5" stroke-linecap="round" />
+            <circle id="svg-elbow-joint" cx="160" cy="116" r="5" fill="#ffffff" stroke="#00b0ff" stroke-width="2" />
 
             <!-- WRIST & CLAW PINCERS -->
-            <circle id="svg-wrist-joint" cx="238" cy="103" r="4" fill="#ffd54f" stroke="#ffab00" stroke-width="1" />
-            <polyline id="svg-claw-l" points="238,103 238,97 252,97" stroke="#ffd54f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-            <polyline id="svg-claw-r" points="238,103 238,109 252,109" stroke="#ffd54f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+            <circle id="svg-wrist-joint" cx="177" cy="69" r="4" fill="#ffd54f" stroke="#ffab00" stroke-width="1" />
+            <polyline id="svg-claw-l" points="177,69 183.2,71.2 188.7,56.2" stroke="#ffd54f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+            <polyline id="svg-claw-r" points="177,69 171.0,66.8 176.5,51.8" stroke="#ffd54f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" />
         </svg>
     </div>
 
@@ -163,6 +163,8 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
             <button class="btn-step" onclick="stepServo(1, 1)">+1°</button>
             <button class="btn-step" onclick="stepServo(1, 5)">+5°</button>
         </div>
+        <!-- Shoulder range: 90–120° (matches Python arm_state.py RANGES[1]) -->
+        <input type="range" id="slider1" min="90" max="120" value="90" style="display:none" oninput="onSlider(1, this.value)">
     </div>
 
     <!-- JOINT 2: ELBOW (TWO BUTTON CONTROL) -->
@@ -197,6 +199,8 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
             <button class="btn-step" onclick="stepServo(2, 1)">+1°</button>
             <button class="btn-step" onclick="stepServo(2, 5)">+5°</button>
         </div>
+        <!-- Elbow range: 75–180° (matches Python arm_state.py RANGES[2]) -->
+        <input type="range" id="slider2" min="75" max="180" value="90" style="display:none" oninput="onSlider(2, this.value)">
     </div>
 
     <!-- JOINT 3: CLAW / GRIPPER (SLIDER CONTROL) -->
@@ -216,8 +220,7 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
             </button>
 
             <div class="slider-container">
-                <input type="range" id="slider3" min="0" max="180" value="90" oninput="onSlider(3, this.value)">
-            </div>
+                <input type="range" id="slider3" min="0" max="180" value="90" oninput="onSlider(3, this.value)">            </div>
 
             <button class="arrow-btn" onclick="stepServo(3, 5)" title="Grip / Close Claw">
                 <span>►</span>
@@ -236,9 +239,9 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
     <!-- PRESETS -->
     <div class="preset-panel">
         <button class="btn-preset" onclick="applyPreset(90, 90, 90, 0)">🏠 HOME (90°)</button>
-        <button class="btn-preset" onclick="applyPreset(130, 45, 30, 0)">📦 PICK POSE</button>
-        <button class="btn-preset" onclick="applyPreset(70, 110, 150, 45)">📍 DROP POSE</button>
-        <button class="btn-preset" onclick="applyPreset(45, 135, 90, 0)">💤 REST / FOLD</button>
+        <button class="btn-preset" onclick="applyPreset(115, 80, 30, 0)">📦 PICK POSE</button>
+        <button class="btn-preset" onclick="applyPreset(95, 110, 150, 45)">📍 DROP POSE</button>
+        <button class="btn-preset" onclick="applyPreset(90, 135, 90, 0)">💤 REST / FOLD</button>
     </div>
 
     <!-- GLOBAL CONTROLS -->
@@ -731,6 +734,13 @@ static const char SCRIPT_JS[] PROGMEM = R"rawliteral(
 // JavaScript Frontend Controller
 // ==========================================
 
+const JOINT_RANGES = {
+    1: { min: 90,  max: 120 },   // Shoulder (matches Python arm_state.py RANGES[1])
+    2: { min: 75,  max: 180 },   // Elbow    (matches Python arm_state.py RANGES[2])
+    3: { min: 0,   max: 180 },   // Claw
+    4: { min: -180, max: 180 },  // Base heading
+};
+
 const state = {
     1: 90, // Shoulder (SG90)
     2: 90, // Elbow (SG90)
@@ -764,31 +774,41 @@ function setConnected(connected, connecting = false) {
 }
 
 // ==========================================
-// UPDATE ROBOTIC ARM VISUALIZER
-// Matches Python GUI Kinematics, Pose & Rotating Base Arrow
+// ROBOTIC ARM 2D LIVE VISUALIZER
+// Matches Python GUI Kinematics, Pose & Smooth Easing
 // ==========================================
 
-function updateVisualizer() {
+const visualState = {
+    1: 90,
+    2: 90,
+    3: 90,
+    4: 0
+};
+let animFrameId = null;
+
+function renderVisualizer(s1, s2, s3, s4) {
     const bx = 160;
     const by = 176;
     const L1 = 60;
     const L2 = 50;
     const CLAW_LEN = 16;
-    const LEAN_DEG = 35;
-    const ELBOW_BEND_DEG = 20;
+    const LEAN_DEG = -10;       // Exactly matches Python ArmVisualizer.LEAN_DEG = -10
+    const ELBOW_BEND_DEG = 20;  // Matches Python ArmVisualizer.ELBOW_BEND_DEG = 20
 
-    const shoulder_deg = (state[1] - 90) * 0.8;
-    const elbow_deg = (state[2] - 90) * 0.8;
-    // Invert claw for gripper: 180 - state[3]
-    const claw_servo = 180 - state[3];
-    const claw_spread = Math.max(3, Math.min(24, (180 - claw_servo) * 0.13));
+    const shoulder_deg = (s1 - 90) * 0.8;
+    const elbow_deg = (s2 - 90) * 0.8;
 
-    // Upper arm kinematics
-    const rad_s = (-90 + LEAN_DEG + shoulder_deg) * Math.PI / 180;
+    // claw_spread: 0 (wide open) to 180 (full grip)
+    // Matches Python ArmVisualizer: (180 - claw_val) * 0.144
+    const claw_spread = Math.max(2, Math.min(26, (180 - s3) * 0.144));
+
+    // Upper arm kinematics (Shoulder)
+    // Python formula: -80 + LEAN_DEG + shoulder_deg (-90° + shoulder_deg)
+    const rad_s = (-80 + LEAN_DEG + shoulder_deg) * Math.PI / 180;
     const ex = bx + L1 * Math.cos(rad_s);
     const ey = by + L1 * Math.sin(rad_s);
 
-    // Forearm kinematics
+    // Forearm kinematics (Elbow)
     const rad_e = rad_s + (ELBOW_BEND_DEG + elbow_deg) * Math.PI / 180;
     const wx = ex + L2 * Math.cos(rad_e);
     const wy = ey + L2 * Math.sin(rad_e);
@@ -859,8 +879,7 @@ function updateVisualizer() {
     // Update Base Direction Arrow & Readout Text
     const baseArrow = document.getElementById('svg-base-arrow');
     const baseText = document.getElementById('svg-base-text');
-    const baseAngle = state[4] || 0;
-    const normAngle = ((Math.round(baseAngle) + 180) % 360) - 180;
+    const normAngle = ((Math.round(s4) + 180) % 360) - 180;
 
     if (baseArrow) {
         baseArrow.setAttribute('transform', `rotate(${normAngle}, ${bx}, ${by})`);
@@ -877,12 +896,61 @@ function updateVisualizer() {
     }
 }
 
+function updateVisualizer(immediate = false) {
+    if (immediate) {
+        visualState[1] = state[1];
+        visualState[2] = state[2];
+        visualState[3] = state[3];
+        visualState[4] = state[4];
+        if (animFrameId) {
+            cancelAnimationFrame(animFrameId);
+            animFrameId = null;
+        }
+        renderVisualizer(visualState[1], visualState[2], visualState[3], visualState[4]);
+        return;
+    }
+
+    if (!animFrameId) {
+        animFrameId = requestAnimationFrame(stepVisualizerAnim);
+    }
+}
+
+function stepVisualizerAnim() {
+    let stillMoving = false;
+    for (let j = 1; j <= 3; j++) {
+        const diff = state[j] - visualState[j];
+        if (Math.abs(diff) > 0.15) {
+            visualState[j] += diff * 0.22;
+            stillMoving = true;
+        } else {
+            visualState[j] = state[j];
+        }
+    }
+
+    const bDiff = state[4] - visualState[4];
+    if (Math.abs(bDiff) > 0.15) {
+        visualState[4] += bDiff * 0.28;
+        stillMoving = true;
+    } else {
+        visualState[4] = state[4];
+    }
+
+    renderVisualizer(visualState[1], visualState[2], visualState[3], visualState[4]);
+
+    if (stillMoving) {
+        animFrameId = requestAnimationFrame(stepVisualizerAnim);
+    } else {
+        animFrameId = null;
+    }
+}
+
 // ==========================================
 // SET SERVO POSITION (JOINTS 1-3)
 // ==========================================
 
 function setJoint(servoId, value, sendToServer = true) {
-    value = Math.max(0, Math.min(180, parseInt(value)));
+    const range = JOINT_RANGES[servoId] || { min: 0, max: 180 };
+    value = Math.max(range.min, Math.min(range.max, parseInt(value)));
     state[servoId] = value;
 
     const slider = document.getElementById('slider' + servoId);
@@ -1083,7 +1151,8 @@ function stopBaseCmd() {
 // ==========================================
 
 function resetAllCmd() {
-    applyPreset(90, 90, 90, 0);
+    // RESET_POSE matches Python robotic_arm_app.py: shoulder=90, elbow=135, claw=90, base=0
+    applyPreset(90, 135, 90, 0);
 
     fetch('/api/reset')
         .then(res => {
@@ -1146,8 +1215,8 @@ function syncStatus() {
         });
 }
 
-// Initial visualizer render and status sync
-updateVisualizer();
+// Initial visualizer render (immediate, no delay) and status sync
+updateVisualizer(true);
 setConnected(false, true);
 syncStatus();
 setInterval(syncStatus, 3000);

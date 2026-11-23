@@ -3,6 +3,13 @@
 // JavaScript Frontend Controller
 // ==========================================
 
+const JOINT_RANGES = {
+    1: { min: 90,  max: 120 },   // Shoulder (matches Python arm_state.py RANGES[1])
+    2: { min: 75,  max: 180 },   // Elbow    (matches Python arm_state.py RANGES[2])
+    3: { min: 0,   max: 180 },   // Claw
+    4: { min: -180, max: 180 },  // Base heading
+};
+
 const state = {
     1: 90, // Shoulder (SG90)
     2: 90, // Elbow (SG90)
@@ -36,31 +43,41 @@ function setConnected(connected, connecting = false) {
 }
 
 // ==========================================
-// UPDATE ROBOTIC ARM VISUALIZER
-// Matches Python GUI Kinematics, Pose & Rotating Base Arrow
+// ROBOTIC ARM 2D LIVE VISUALIZER
+// Matches Python GUI Kinematics, Pose & Smooth Easing
 // ==========================================
 
-function updateVisualizer() {
+const visualState = {
+    1: 90,
+    2: 90,
+    3: 90,
+    4: 0
+};
+let animFrameId = null;
+
+function renderVisualizer(s1, s2, s3, s4) {
     const bx = 160;
     const by = 176;
     const L1 = 60;
     const L2 = 50;
     const CLAW_LEN = 16;
-    const LEAN_DEG = 35;
-    const ELBOW_BEND_DEG = 20;
+    const LEAN_DEG = -10;       // Exactly matches Python ArmVisualizer.LEAN_DEG = -10
+    const ELBOW_BEND_DEG = 20;  // Matches Python ArmVisualizer.ELBOW_BEND_DEG = 20
 
-    const shoulder_deg = (state[1] - 90) * 0.8;
-    const elbow_deg = (state[2] - 90) * 0.8;
-    // Invert claw for gripper: 180 - state[3]
-    const claw_servo = 180 - state[3];
-    const claw_spread = Math.max(3, Math.min(24, (180 - claw_servo) * 0.13));
+    const shoulder_deg = (s1 - 90) * 0.8;
+    const elbow_deg = (s2 - 90) * 0.8;
 
-    // Upper arm kinematics
-    const rad_s = (-90 + LEAN_DEG + shoulder_deg) * Math.PI / 180;
+    // claw_spread: 0 (wide open) to 180 (full grip)
+    // Matches Python ArmVisualizer: (180 - claw_val) * 0.144
+    const claw_spread = Math.max(2, Math.min(26, (180 - s3) * 0.144));
+
+    // Upper arm kinematics (Shoulder)
+    // Python formula: -80 + LEAN_DEG + shoulder_deg (-90° + shoulder_deg)
+    const rad_s = (-80 + LEAN_DEG + shoulder_deg) * Math.PI / 180;
     const ex = bx + L1 * Math.cos(rad_s);
     const ey = by + L1 * Math.sin(rad_s);
 
-    // Forearm kinematics
+    // Forearm kinematics (Elbow)
     const rad_e = rad_s + (ELBOW_BEND_DEG + elbow_deg) * Math.PI / 180;
     const wx = ex + L2 * Math.cos(rad_e);
     const wy = ey + L2 * Math.sin(rad_e);
@@ -131,8 +148,7 @@ function updateVisualizer() {
     // Update Base Direction Arrow & Readout Text
     const baseArrow = document.getElementById('svg-base-arrow');
     const baseText = document.getElementById('svg-base-text');
-    const baseAngle = state[4] || 0;
-    const normAngle = ((Math.round(baseAngle) + 180) % 360) - 180;
+    const normAngle = ((Math.round(s4) + 180) % 360) - 180;
 
     if (baseArrow) {
         baseArrow.setAttribute('transform', `rotate(${normAngle}, ${bx}, ${by})`);
@@ -149,12 +165,61 @@ function updateVisualizer() {
     }
 }
 
+function updateVisualizer(immediate = false) {
+    if (immediate) {
+        visualState[1] = state[1];
+        visualState[2] = state[2];
+        visualState[3] = state[3];
+        visualState[4] = state[4];
+        if (animFrameId) {
+            cancelAnimationFrame(animFrameId);
+            animFrameId = null;
+        }
+        renderVisualizer(visualState[1], visualState[2], visualState[3], visualState[4]);
+        return;
+    }
+
+    if (!animFrameId) {
+        animFrameId = requestAnimationFrame(stepVisualizerAnim);
+    }
+}
+
+function stepVisualizerAnim() {
+    let stillMoving = false;
+    for (let j = 1; j <= 3; j++) {
+        const diff = state[j] - visualState[j];
+        if (Math.abs(diff) > 0.15) {
+            visualState[j] += diff * 0.22;
+            stillMoving = true;
+        } else {
+            visualState[j] = state[j];
+        }
+    }
+
+    const bDiff = state[4] - visualState[4];
+    if (Math.abs(bDiff) > 0.15) {
+        visualState[4] += bDiff * 0.28;
+        stillMoving = true;
+    } else {
+        visualState[4] = state[4];
+    }
+
+    renderVisualizer(visualState[1], visualState[2], visualState[3], visualState[4]);
+
+    if (stillMoving) {
+        animFrameId = requestAnimationFrame(stepVisualizerAnim);
+    } else {
+        animFrameId = null;
+    }
+}
+
 // ==========================================
 // SET SERVO POSITION (JOINTS 1-3)
 // ==========================================
 
 function setJoint(servoId, value, sendToServer = true) {
-    value = Math.max(0, Math.min(180, parseInt(value)));
+    const range = JOINT_RANGES[servoId] || { min: 0, max: 180 };
+    value = Math.max(range.min, Math.min(range.max, parseInt(value)));
     state[servoId] = value;
 
     const slider = document.getElementById('slider' + servoId);
@@ -355,7 +420,8 @@ function stopBaseCmd() {
 // ==========================================
 
 function resetAllCmd() {
-    applyPreset(90, 90, 90, 0);
+    // RESET_POSE matches Python robotic_arm_app.py: shoulder=90, elbow=135, claw=90, base=0
+    applyPreset(90, 135, 90, 0);
 
     fetch('/api/reset')
         .then(res => {
@@ -418,8 +484,8 @@ function syncStatus() {
         });
 }
 
-// Initial visualizer render and status sync
-updateVisualizer();
+// Initial visualizer render (immediate, no delay) and status sync
+updateVisualizer(true);
 setConnected(false, true);
 syncStatus();
 setInterval(syncStatus, 3000);

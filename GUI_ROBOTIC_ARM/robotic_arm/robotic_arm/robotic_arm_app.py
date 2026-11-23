@@ -16,7 +16,7 @@ from servo_easer import ServoEaser
 
 class RoboticArmApp:
     # "RESET ALL JOINTS" moves to this pose (the old fold / rest pose)
-    RESET_POSE = (45, 135, 90, 0)        # shoulder, elbow, claw, base (degrees)
+    RESET_POSE = (90, 135, 90, 0)        # shoulder, elbow, claw, base (degrees)
 
     def __init__(self, root):
         self.root = root

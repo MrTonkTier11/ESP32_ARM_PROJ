@@ -6,7 +6,7 @@ from theme import ACCENT_CYAN, CARD_BORDER, COLOR_YELLOW
 
 
 class ArmVisualizer(tk.Canvas):
-    LEAN_DEG = 35         # extra tilt of the whole arm
+    LEAN_DEG = -10         # extra tilt of the whole arm
     ELBOW_BEND_DEG = 20   # natural forearm bend
     L1 = 60               # upper-arm length (px)
     L2 = 50               # forearm length (px)
@@ -36,8 +36,14 @@ class ArmVisualizer(tk.Canvas):
 
         shoulder_deg = (self.state.shown(1) - 90) * 0.8
         elbow_deg = (self.state.shown(2) - 90) * 0.8
-        claw_servo = self.state.to_servo(3, self.state.shown(3))
-        claw_spread = max(3, min(24, (180 - claw_servo) * 0.13))
+        # claw_val: 0 = fully open end of slider, 180 = full grip end.
+        # Because joint 3 is inverted, a high slider value means the servo
+        # is at a LOW angle (closed/gripped). We use the raw shown() value
+        # (before servo inversion) so the visual spread matches the slider:
+        # slider near 0  → spread large (open claw)
+        # slider near 180 → spread small (gripped / closed claw)
+        claw_val = self.state.shown(3)   # 0–180, same direction as the slider
+        claw_spread = max(2, min(26, (180 - claw_val) * 0.144))
         base_angle = self.state.get(4)  # 0° = forward, negative = left, positive = right
 
         # 1. Base Pedestal Platform
@@ -88,7 +94,7 @@ class ArmVisualizer(tk.Canvas):
         c.create_text(bx, by + 34, text=dir_label, fill=ACCENT_CYAN, font=("Segoe UI", 8, "bold"))
 
         # 4. Upper arm kinematics (Shoulder)
-        rad_s = math.radians(-90 + self.LEAN_DEG + shoulder_deg)
+        rad_s = math.radians(-80 + self.LEAN_DEG + shoulder_deg)
         ex = bx + self.L1 * math.cos(rad_s)
         ey = by + self.L1 * math.sin(rad_s)
 
