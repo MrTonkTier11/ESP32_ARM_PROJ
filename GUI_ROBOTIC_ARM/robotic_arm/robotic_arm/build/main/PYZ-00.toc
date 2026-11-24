@@ -1,4 +1,4 @@
-('D:\\ARDUINO_PROJS\\ESP_ROBOTIK_ARM\\ESP32_ARM_PROJ\\GUI_ROBOTIC_ARM\\robotic_arm\\robotic_arm\\build\\RoboticArmStation\\PYZ-00.pyz',
+('D:\\ARDUINO_PROJS\\ESP_ROBOTIK_ARM\\ESP32_ARM_PROJ\\GUI_ROBOTIC_ARM\\robotic_arm\\robotic_arm\\build\\main\\PYZ-00.pyz',
  [('__future__',
    'C:\\Program Files\\Python315\\Lib\\__future__.py',
    'PYMODULE'),
