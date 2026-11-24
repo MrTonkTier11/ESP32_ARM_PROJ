@@ -18,7 +18,7 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-    <title>ESP32 Robotic Arm Control</title>
+    <title>ESP32 Robotic Arm Control Station</title>
 
     <!-- External CSS -->
     <link rel="stylesheet" href="style.css">
@@ -26,228 +26,264 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
 
 <body>
 
-    <!-- HEADER -->
+    <!-- TOP HEADER -->
     <header>
-        <h1>🤖 Robotic Arm</h1>
+        <div class="header-left">
+            <h1>🤖 Robotic Arm</h1>
+            <span class="subtitle">ESP32 4-DOF Web Controller</span>
+        </div>
+        <div class="status-bar">
+            <div class="badge">
+                <div class="indicator" id="status-dot"></div>
+                <span id="status-text">Connecting...</span>
+            </div>
+            <span class="ip-text" id="ip-text">192.168.4.1</span>
+        </div>
     </header>
 
-    <!-- CONNECTION STATUS -->
-    <div class="status-bar">
-        <div class="badge">
-            <div class="indicator" id="status-dot"></div>
-            <span id="status-text">Connecting...</span>
-        </div>
+    <!-- 30% CONTROLS / 70% VISUALIZER MAIN LAYOUT -->
+    <div class="app-layout">
+        
+        <!-- LEFT COLUMN: CONTROLS (~30%) -->
+        <div class="controls-panel">
 
-        <span class="ip-text" id="ip-text">192.168.4.1</span>
-    </div>
+            <!-- JOINT 4: BASE ROTATION (360° CONTINUOUS JOG) -->
+            <div class="joint-card">
+                <div class="joint-header">
+                    <div>
+                        <div class="joint-name">↺ BASE ROTATION</div>
+                        <div class="joint-type">MG90S 360° Continuous · GPIO 21</div>
+                    </div>
+                    <div class="angle-badge" id="val4">STOPPED</div>
+                </div>
 
-    <!-- ROBOTIC ARM VISUALIZER (Matches Python GUI Live View) -->
-    <div class="visualizer-card">
-        <div class="visualizer-title">
-            Live Joint Mimic Pose
-        </div>
+                <div class="jog-row">
+                    <button class="btn-jog" id="btn-jog-ccw"
+                        onpointerdown="startJog(-1)" onpointerup="stopJog()" onpointerleave="stopJog()"
+                        title="Hold to rotate Left">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                            <polyline points="3 3 3 8 8 8"></polyline>
+                        </svg>
+                        <span>ROTATE LEFT</span>
+                        <span class="jog-sub">HOLD CCW</span>
+                    </button>
 
-        <svg class="arm-svg" viewBox="0 0 320 220" id="arm-visualizer-svg">
-            <defs>
-                <linearGradient id="armGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#00d9ff" />
-                    <stop offset="100%" stop-color="#0066ff" />
-                </linearGradient>
-            </defs>
-
-            <!-- BASE PLATFORM PEDESTAL -->
-            <rect x="100" y="174" width="120" height="18" rx="4" fill="#151d2d" stroke="#25324d" stroke-width="2" />
-            <rect x="90" y="188" width="140" height="8" rx="2" fill="#0f1624" stroke="#1c263a" stroke-width="1" />
-            <ellipse cx="160" cy="176" rx="32" ry="14" fill="#0c121e" stroke="#25324d" stroke-width="2" />
-            <ellipse cx="160" cy="176" rx="26" ry="10" fill="#131c2c" stroke="#1f2d45" stroke-width="1" />
-
-            <!-- BASE DIRECTION ARROW (Rotates with base angle) -->
-            <g id="svg-base-arrow" transform="rotate(0, 160, 176)">
-                <line x1="160" y1="176" x2="160" y2="154" stroke="#00d9ff" stroke-width="3" stroke-linecap="round" />
-                <polygon points="160,148 154,157 160,154 166,157" fill="#00d9ff" stroke="#ffffff" stroke-width="1" />
-                <circle cx="160" cy="176" r="4" fill="#ffffff" stroke="#00d9ff" stroke-width="2" />
-            </g>
-
-            <!-- BASE DIRECTION READOUT TEXT -->
-            <text id="svg-base-text" x="160" y="210" fill="#00d9ff" font-size="9" font-weight="bold" text-anchor="middle">BASE: 0° [CENTER]</text>
-
-            <!-- UPPER ARM LINK (SHOULDER) -->
-            <line id="svg-upper-arm" x1="160" y1="176" x2="160" y2="116" stroke="#00b0ff" stroke-width="7" stroke-linecap="round" />
-            <circle id="svg-shoulder-joint" cx="160" cy="176" r="6" fill="#ffffff" stroke="#00d9ff" stroke-width="2" />
-
-            <!-- FOREARM LINK (ELBOW) -->
-            <line id="svg-forearm" x1="160" y1="116" x2="177" y2="69" stroke="#2979ff" stroke-width="5" stroke-linecap="round" />
-            <circle id="svg-elbow-joint" cx="160" cy="116" r="5" fill="#ffffff" stroke="#00b0ff" stroke-width="2" />
-
-            <!-- WRIST & CLAW PINCERS -->
-            <circle id="svg-wrist-joint" cx="177" cy="69" r="4" fill="#ffd54f" stroke="#ffab00" stroke-width="1" />
-            <polyline id="svg-claw-l" points="177,69 183.2,71.2 188.7,56.2" stroke="#ffd54f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-            <polyline id="svg-claw-r" points="177,69 171.0,66.8 176.5,51.8" stroke="#ffd54f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-        </svg>
-    </div>
-
-    <!-- JOINT 4: BASE ROTATION (360° CONTINUOUS JOG) -->
-    <div class="joint-card">
-        <div class="joint-header">
-            <div>
-                <div class="joint-name">↺ BASE ROTATION</div>
-                <div class="joint-type">MG90S 360° Continuous · GPIO 21</div>
+                    <button class="btn-jog" id="btn-jog-cw"
+                        onpointerdown="startJog(1)" onpointerup="stopJog()" onpointerleave="stopJog()"
+                        title="Hold to rotate Right">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                            <polyline points="21 3 21 8 16 8"></polyline>
+                        </svg>
+                        <span>ROTATE RIGHT</span>
+                        <span class="jog-sub">HOLD CW</span>
+                    </button>
+                </div>
             </div>
-            <div class="angle-badge" id="val4" style="min-width: 90px; font-size: 0.85rem;">STOPPED</div>
-        </div>
 
-        <!-- CONTINUOUS JOG BUTTONS (HOLD TO ROTATE) -->
-        <div class="jog-row">
-            <button class="btn-jog" id="btn-jog-ccw"
-                onpointerdown="startJog(-1)" onpointerup="stopJog()" onpointerleave="stopJog()"
-                title="Hold to rotate Left">
-                <span>◀ ROTATE LEFT</span>
-                <span class="jog-sub">HOLD CCW</span>
-            </button>
+            <!-- JOINT 1: SHOULDER (TWO BUTTON CONTROL) -->
+            <div class="joint-card">
+                <div class="joint-header">
+                    <div>
+                        <div class="joint-name">▲ SHOULDER JOINT</div>
+                        <div class="joint-type">Servo 1 (SG90) · Main Arm Pitch · GPIO 4</div>
+                    </div>
+                    <div class="angle-badge" id="val1">90°</div>
+                </div>
 
-            <button class="btn-jog" id="btn-jog-cw"
-                onpointerdown="startJog(1)" onpointerup="stopJog()" onpointerleave="stopJog()"
-                title="Hold to rotate Right">
-                <span>ROTATE RIGHT ▶</span>
-                <span class="jog-sub">HOLD CW</span>
-            </button>
-        </div>
+                <div class="jog-row">
+                    <button class="btn-jog" id="btn-shoulder-down"
+                        onpointerdown="startJointHold(1, -1)" onpointerup="stopJointHold()" onpointerleave="stopJointHold()"
+                        title="Lower Arm">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="4" x2="12" y2="20"></line>
+                            <polyline points="6 14 12 20 18 14"></polyline>
+                        </svg>
+                        <span>DOWN</span>
+                        <span class="jog-sub">LOWER ARM</span>
+                    </button>
 
-        <!-- FINE NUDGE / STEP BUTTONS -->
-        <div class="action-row">
-            <button class="btn-step" onclick="nudgeBase(-1, 80)" title="Nudge CCW 80ms">◀ 80ms</button>
-            <button class="btn-step" onclick="nudgeBase(-1, 200)" title="Nudge CCW 200ms">◀ 200ms</button>
-            <button class="btn-action btn-stop-base" onclick="stopBaseCmd()">⏹ STOP BASE</button>
-            <button class="btn-step" onclick="nudgeBase(1, 200)" title="Nudge CW 200ms">200ms ▶</button>
-            <button class="btn-step" onclick="nudgeBase(1, 80)" title="Nudge CW 80ms">80ms ▶</button>
-        </div>
+                    <button class="btn-jog" id="btn-shoulder-up"
+                        onpointerdown="startJointHold(1, 1)" onpointerup="stopJointHold()" onpointerleave="stopJointHold()"
+                        title="Raise Arm">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="20" x2="12" y2="4"></line>
+                            <polyline points="6 10 12 4 18 10"></polyline>
+                        </svg>
+                        <span>UP</span>
+                        <span class="jog-sub">RAISE ARM</span>
+                    </button>
+                </div>
 
-        <!-- SPEED SELECTION -->
-        <div class="speed-row">
-            <span class="speed-label">Speed:</span>
-            <button class="btn-speed" id="spd-slow" onclick="setJogSpeed(120)">Slow</button>
-            <button class="btn-speed active" id="spd-norm" onclick="setJogSpeed(200)">Normal</button>
-            <button class="btn-speed" id="spd-fast" onclick="setJogSpeed(320)">Fast</button>
-        </div>
-    </div>
-
-    <!-- JOINT 1: SHOULDER (TWO BUTTON CONTROL) -->
-    <div class="joint-card">
-        <div class="joint-header">
-            <div>
-                <div class="joint-name">▲ SHOULDER JOINT</div>
-                <div class="joint-type">Servo 1 (SG90) · Main Arm Pitch · GPIO 4</div>
+                <div class="action-row">
+                    <button class="btn-step" onclick="stepServo(1, -5)">-5°</button>
+                    <button class="btn-step" onclick="stepServo(1, -1)">-1°</button>
+                    <button class="btn-step" onclick="stepServo(1, 1)">+1°</button>
+                    <button class="btn-step" onclick="stepServo(1, 5)">+5°</button>
+                </div>
+                <!-- Shoulder range: 90–120° -->
+                <input type="range" id="slider1" min="90" max="120" value="90" style="display:none" oninput="onSlider(1, this.value)">
             </div>
-            <div class="angle-badge" id="val1">90°</div>
-        </div>
 
-        <div class="jog-row">
-            <button class="btn-jog" id="btn-shoulder-down"
-                onpointerdown="startJointHold(1, -1)" onpointerup="stopJointHold()" onpointerleave="stopJointHold()"
-                title="Lower Arm">
-                <span>▼ LOWER ARM</span>
-                <span class="jog-sub">HOLD DOWN</span>
-            </button>
+            <!-- JOINT 2: ELBOW (TWO BUTTON CONTROL) -->
+            <div class="joint-card">
+                <div class="joint-header">
+                    <div>
+                        <div class="joint-name">↶ ELBOW JOINT</div>
+                        <div class="joint-type">Servo 2 (SG90) · Forearm Pitch · GPIO 18</div>
+                    </div>
+                    <div class="angle-badge" id="val2">90°</div>
+                </div>
 
-            <button class="btn-jog" id="btn-shoulder-up"
-                onpointerdown="startJointHold(1, 1)" onpointerup="stopJointHold()" onpointerleave="stopJointHold()"
-                title="Raise Arm">
-                <span>RAISE ARM ▲</span>
-                <span class="jog-sub">HOLD UP</span>
-            </button>
-        </div>
+                <div class="jog-row">
+                    <button class="btn-jog" id="btn-elbow-back"
+                        onpointerdown="startJointHold(2, -1)" onpointerup="stopJointHold()" onpointerleave="stopJointHold()"
+                        title="Retract Forearm">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 14L4 9l5-5"></path>
+                            <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v2.5"></path>
+                        </svg>
+                        <span>RETRACT</span>
+                        <span class="jog-sub">HOLD BACK</span>
+                    </button>
 
-        <div class="action-row">
-            <button class="btn-step" onclick="stepServo(1, -5)">-5°</button>
-            <button class="btn-step" onclick="stepServo(1, -1)">-1°</button>
-            <button class="btn-step" onclick="stepServo(1, 1)">+1°</button>
-            <button class="btn-step" onclick="stepServo(1, 5)">+5°</button>
-        </div>
-        <!-- Shoulder range: 90–120° (matches Python arm_state.py RANGES[1]) -->
-        <input type="range" id="slider1" min="90" max="120" value="90" style="display:none" oninput="onSlider(1, this.value)">
-    </div>
+                    <button class="btn-jog" id="btn-elbow-fwd"
+                        onpointerdown="startJointHold(2, 1)" onpointerup="stopJointHold()" onpointerleave="stopJointHold()"
+                        title="Extend Forearm">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M15 14l5-5-5-5"></path>
+                            <path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5V17"></path>
+                        </svg>
+                        <span>EXTEND</span>
+                        <span class="jog-sub">HOLD FWD</span>
+                    </button>
+                </div>
 
-    <!-- JOINT 2: ELBOW (TWO BUTTON CONTROL) -->
-    <div class="joint-card">
-        <div class="joint-header">
-            <div>
-                <div class="joint-name">↶ ELBOW JOINT</div>
-                <div class="joint-type">Servo 2 (SG90) · Forearm Pitch · GPIO 18</div>
+                <div class="action-row">
+                    <button class="btn-step" onclick="stepServo(2, -5)">-5°</button>
+                    <button class="btn-step" onclick="stepServo(2, -1)">-1°</button>
+                    <button class="btn-step" onclick="stepServo(2, 1)">+1°</button>
+                    <button class="btn-step" onclick="stepServo(2, 5)">+5°</button>
+                </div>
+                <!-- Elbow range: 75–180° -->
+                <input type="range" id="slider2" min="75" max="180" value="90" style="display:none" oninput="onSlider(2, this.value)">
             </div>
-            <div class="angle-badge" id="val2">90°</div>
-        </div>
 
-        <div class="jog-row">
-            <button class="btn-jog" id="btn-elbow-back"
-                onpointerdown="startJointHold(2, -1)" onpointerup="stopJointHold()" onpointerleave="stopJointHold()"
-                title="Retract Forearm">
-                <span>↶ RETRACT</span>
-                <span class="jog-sub">HOLD BACK</span>
-            </button>
+            <!-- JOINT 3: CLAW / GRIPPER (SLIDER CONTROL) -->
+            <div class="joint-card">
+                <div class="joint-header">
+                    <div>
+                        <div class="joint-name">🤏 CLAW / GRIPPER</div>
+                        <div class="joint-type">Servo 3 (SG90) · Pincer Grip · GPIO 19</div>
+                    </div>
+                    <div class="angle-badge" id="val3">90°</div>
+                </div>
 
-            <button class="btn-jog" id="btn-elbow-fwd"
-                onpointerdown="startJointHold(2, 1)" onpointerup="stopJointHold()" onpointerleave="stopJointHold()"
-                title="Extend Forearm">
-                <span>EXTEND ↷</span>
-                <span class="jog-sub">HOLD FWD</span>
-            </button>
-        </div>
+                <div class="control-row">
+                    <button class="arrow-btn" onclick="stepServo(3, -5)" title="Open Claw">
+                        <span>◄</span>
+                        <span class="arrow-sub">OPEN</span>
+                    </button>
 
-        <div class="action-row">
-            <button class="btn-step" onclick="stepServo(2, -5)">-5°</button>
-            <button class="btn-step" onclick="stepServo(2, -1)">-1°</button>
-            <button class="btn-step" onclick="stepServo(2, 1)">+1°</button>
-            <button class="btn-step" onclick="stepServo(2, 5)">+5°</button>
-        </div>
-        <!-- Elbow range: 75–180° (matches Python arm_state.py RANGES[2]) -->
-        <input type="range" id="slider2" min="75" max="180" value="90" style="display:none" oninput="onSlider(2, this.value)">
-    </div>
+                    <div class="slider-container">
+                        <input type="range" id="slider3" min="0" max="180" value="90" oninput="onSlider(3, this.value)">
+                    </div>
 
-    <!-- JOINT 3: CLAW / GRIPPER (SLIDER CONTROL) -->
-    <div class="joint-card">
-        <div class="joint-header">
-            <div>
-                <div class="joint-name">🤏 CLAW / GRIPPER</div>
-                <div class="joint-type">Servo 3 (SG90) · Pincer Grip · GPIO 19</div>
+                    <button class="arrow-btn" onclick="stepServo(3, 5)" title="Grip / Close Claw">
+                        <span>►</span>
+                        <span class="arrow-sub">GRIP</span>
+                    </button>
+                </div>
+
+                <div class="action-row">
+                    <button class="btn-action btn-claw-open" onclick="setJoint(3, 30)">🔓 FULL OPEN</button>
+                    <button class="btn-step" onclick="stepServo(3, -2)">-2°</button>
+                    <button class="btn-step" onclick="stepServo(3, 2)">+2°</button>
+                    <button class="btn-action btn-claw-grip" onclick="setJoint(3, 150)">🔒 FULL GRIP</button>
+                </div>
             </div>
-            <div class="angle-badge" id="val3">90°</div>
+
+            <!-- PRESETS -->
+            <div class="preset-panel">
+                <button class="btn-preset" onclick="applyPreset(90, 90, 90, 0)">🏠 HOME (90°)</button>
+                <button class="btn-preset" onclick="applyPreset(115, 80, 30, 0)">📦 PICK POSE</button>
+                <button class="btn-preset" onclick="applyPreset(95, 110, 150, 45)">📍 DROP POSE</button>
+                <button class="btn-preset" onclick="applyPreset(90, 135, 90, 0)">💤 REST / FOLD</button>
+            </div>
+
+            <!-- GLOBAL CONTROLS -->
+            <div class="global-controls">
+                <button class="btn-global btn-reset" onclick="resetAllCmd()">↺ RESET ALL JOINTS (REST POSE)</button>
+            </div>
+
         </div>
 
-        <div class="control-row">
-            <button class="arrow-btn" onclick="stepServo(3, -5)" title="Open Claw">
-                <span>◄</span>
-                <span class="arrow-sub">OPEN</span>
-            </button>
+        <!-- RIGHT COLUMN: ENLARGED LIVE 2D ANIMATION (~70%) -->
+        <div class="visualizer-panel">
+            <div class="visualizer-card">
+                <div class="visualizer-header">
+                    <div class="visualizer-title">LIVE 2D KINEMATICS MIMIC</div>
+                    <div class="visualizer-badge">REAL-TIME POSE</div>
+                </div>
 
-            <div class="slider-container">
-                <input type="range" id="slider3" min="0" max="180" value="90" oninput="onSlider(3, this.value)">            </div>
+                <div class="svg-container">
+                    <svg class="arm-svg" viewBox="0 0 340 240" id="arm-visualizer-svg" preserveAspectRatio="xMidYMid meet">
+                        <defs>
+                            <linearGradient id="armGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#00d9ff" />
+                                <stop offset="100%" stop-color="#0066ff" />
+                            </linearGradient>
+                            <radialGradient id="pedestalGlow" cx="50%" cy="50%" r="50%">
+                                <stop offset="0%" stop-color="#00d9ff" stop-opacity="0.15" />
+                                <stop offset="100%" stop-color="#00d9ff" stop-opacity="0" />
+                            </radialGradient>
+                        </defs>
 
-            <button class="arrow-btn" onclick="stepServo(3, 5)" title="Grip / Close Claw">
-                <span>►</span>
-                <span class="arrow-sub">GRIP</span>
-            </button>
+                        <!-- GRID / BACKGROUND ACCENTS -->
+                        <line x1="20" y1="210" x2="320" y2="210" stroke="#1b2438" stroke-width="1.5" stroke-dasharray="4 4" />
+
+                        <!-- BASE PLATFORM PEDESTAL -->
+                        <ellipse cx="170" cy="190" rx="60" ry="16" fill="url(#pedestalGlow)" />
+                        <rect x="110" y="188" width="120" height="20" rx="5" fill="#151d2d" stroke="#25324d" stroke-width="2" />
+                        <rect x="98" y="204" width="144" height="10" rx="3" fill="#0f1624" stroke="#1c263a" stroke-width="1.5" />
+                        <ellipse cx="170" cy="190" rx="36" ry="15" fill="#0c121e" stroke="#25324d" stroke-width="2" />
+                        <ellipse cx="170" cy="190" rx="28" ry="10" fill="#131c2c" stroke="#1f2d45" stroke-width="1.5" />
+
+                        <!-- BASE DIRECTION ARROW (Rotates with base angle) -->
+                        <g id="svg-base-arrow" transform="rotate(0, 170, 190)">
+                            <line x1="170" y1="190" x2="170" y2="162" stroke="#00d9ff" stroke-width="3.5" stroke-linecap="round" />
+                            <polygon points="170,154 163,165 170,162 177,165" fill="#00d9ff" stroke="#ffffff" stroke-width="1" />
+                            <circle cx="170" cy="190" r="4.5" fill="#ffffff" stroke="#00d9ff" stroke-width="2" />
+                        </g>
+
+                        <!-- BASE DIRECTION READOUT TEXT -->
+                        <text id="svg-base-text" x="170" y="228" fill="#00d9ff" font-size="11" font-weight="bold" text-anchor="middle">BASE: 0° [CENTER]</text>
+
+                        <!-- UPPER ARM LINK (SHOULDER) -->
+                        <line id="svg-upper-arm" x1="170" y1="190" x2="170" y2="124" stroke="#00b0ff" stroke-width="8" stroke-linecap="round" />
+                        <circle id="svg-shoulder-joint" cx="170" cy="190" r="7.5" fill="#ffffff" stroke="#00d9ff" stroke-width="2.5" />
+
+                        <!-- FOREARM LINK (ELBOW) -->
+                        <line id="svg-forearm" x1="170" y1="124" x2="190" y2="72" stroke="#2979ff" stroke-width="6" stroke-linecap="round" />
+                        <circle id="svg-elbow-joint" cx="170" cy="124" r="6" fill="#ffffff" stroke="#00b0ff" stroke-width="2" />
+
+                        <!-- WRIST & CLAW PINCERS -->
+                        <circle id="svg-wrist-joint" cx="190" cy="72" r="5" fill="#ffd54f" stroke="#ffab00" stroke-width="1.5" />
+                        <polyline id="svg-claw-l" points="190,72 197,74 204,56" stroke="#ffd54f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+                        <polyline id="svg-claw-r" points="190,72 183,70 190,52" stroke="#ffd54f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+                    </svg>
+                </div>
+
+                <div class="visualizer-legend">
+                    <span class="legend-item"><span class="legend-dot dot-shoulder"></span> Shoulder</span>
+                    <span class="legend-item"><span class="legend-dot dot-elbow"></span> Elbow</span>
+                    <span class="legend-item"><span class="legend-dot dot-claw"></span> Claw</span>
+                    <span class="legend-item"><span class="legend-dot dot-base"></span> Base Heading</span>
+                </div>
+            </div>
         </div>
 
-        <div class="action-row">
-            <button class="btn-action btn-claw-open" onclick="setJoint(3, 30)">🔓 FULL OPEN</button>
-            <button class="btn-step" onclick="stepServo(3, -2)">-2°</button>
-            <button class="btn-step" onclick="stepServo(3, 2)">+2°</button>
-            <button class="btn-action btn-claw-grip" onclick="setJoint(3, 150)">🔒 FULL GRIP</button>
-        </div>
-    </div>
-
-    <!-- PRESETS -->
-    <div class="preset-panel">
-        <button class="btn-preset" onclick="applyPreset(90, 90, 90, 0)">🏠 HOME (90°)</button>
-        <button class="btn-preset" onclick="applyPreset(115, 80, 30, 0)">📦 PICK POSE</button>
-        <button class="btn-preset" onclick="applyPreset(95, 110, 150, 45)">📍 DROP POSE</button>
-        <button class="btn-preset" onclick="applyPreset(90, 135, 90, 0)">💤 REST / FOLD</button>
-    </div>
-
-    <!-- GLOBAL CONTROLS -->
-    <div class="global-controls">
-        <button class="btn-global btn-reset" onclick="resetAllCmd()">↺ RESET ALL</button>
-        <button class="btn-global btn-stop-all" onclick="stopBaseCmd()">⏹ STOP BASE</button>
     </div>
 
     <!-- External JavaScript -->
@@ -286,53 +322,62 @@ body {
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
         Roboto, Helvetica, Arial, sans-serif;
-    padding: 12px;
-    padding-bottom: 30px;
-    max-width: 600px;
+    padding: 14px 20px 24px 20px;
     margin: 0 auto;
+    max-width: 1400px;
+    min-height: 100vh;
 }
 
 /* HEADER */
 header {
-    text-align: center;
-    padding: 10px 0 16px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0 16px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    margin-bottom: 16px;
 }
 
-h1 {
-    font-size: 1.35rem;
+.header-left h1 {
+    font-size: 1.4rem;
     font-weight: 800;
     letter-spacing: 1px;
     color: var(--accent);
     text-transform: uppercase;
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: 8px;
+}
+
+.header-left .subtitle {
+    font-size: 0.72rem;
+    color: var(--subtext);
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
 
 /* STATUS BAR */
 .status-bar {
-    display: flex;
-    justify-content: space-between;
+    display: inline-flex;
     align-items: center;
+    gap: 14px;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
     border-radius: 12px;
-    padding: 8px 14px;
+    padding: 8px 16px;
     font-size: 0.8rem;
-    margin-bottom: 12px;
 }
 
 .badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     font-weight: 600;
 }
 
 .indicator {
-    width: 8px;
-    height: 8px;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     background: var(--green);
     box-shadow: 0 0 8px var(--green);
@@ -352,42 +397,121 @@ h1 {
 .ip-text {
     color: var(--subtext);
     font-size: 0.75rem;
+    font-family: monospace;
 }
 
-/* VISUAL ARM CANVAS */
+/* 30% / 70% MAIN SPLIT LAYOUT */
+.app-layout {
+    display: flex;
+    gap: 18px;
+    align-items: stretch;
+}
+
+.controls-panel {
+    flex: 0 0 340px;
+    max-width: 380px;
+    display: flex;
+    flex-direction: column;
+}
+
+.visualizer-panel {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* VISUAL ARM CANVAS (Takes ~70% of screen) */
 .visualizer-card {
     background: var(--card-bg);
     border: 1px solid var(--card-border);
-    border-radius: 16px;
-    padding: 12px;
-    margin-bottom: 14px;
+    border-radius: 18px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
     align-items: center;
+    height: 100%;
+    min-height: 520px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.visualizer-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .visualizer-title {
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: var(--subtext);
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: var(--accent);
     text-transform: uppercase;
     letter-spacing: 1px;
-    margin-bottom: 6px;
+}
+
+.visualizer-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--subtext);
+    background: #0d1322;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--card-border);
+}
+
+.svg-container {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 380px;
 }
 
 svg.arm-svg {
     width: 100%;
-    max-width: 320px;
-    height: 220px;
+    height: 100%;
+    max-height: 580px;
 }
+
+.visualizer-legend {
+    display: flex;
+    gap: 16px;
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.legend-item {
+    font-size: 0.75rem;
+    color: var(--subtext);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.dot-shoulder { background: #00b0ff; }
+.dot-elbow    { background: #2979ff; }
+.dot-claw     { background: #ffd54f; }
+.dot-base     { background: #00d9ff; }
 
 /* JOINT CARD */
 .joint-card {
     background: var(--card-bg);
     border: 1px solid var(--card-border);
     border-radius: 16px;
-    padding: 14px;
-    margin-bottom: 12px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
 
@@ -399,7 +523,7 @@ svg.arm-svg {
 }
 
 .joint-name {
-    font-size: 0.95rem;
+    font-size: 0.88rem;
     font-weight: 700;
     color: var(--accent);
     display: flex;
@@ -408,29 +532,82 @@ svg.arm-svg {
 }
 
 .joint-type {
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     color: var(--subtext);
     font-weight: 400;
 }
 
 .angle-badge {
-    font-size: 1.15rem;
+    font-size: 1.05rem;
     font-weight: 800;
     color: #fff;
     background: #0d1322;
-    padding: 2px 10px;
+    padding: 3px 10px;
     border-radius: 8px;
     border: 1px solid var(--card-border);
-    min-width: 54px;
+    min-width: 60px;
     text-align: center;
 }
 
-/* CONTROL ROW */
+/* JOG BUTTONS WITH LARGE PROPORTIONATE ICONS */
+.jog-row {
+    display: flex;
+    gap: 10px;
+    margin: 8px 0;
+}
+
+.btn-jog {
+    flex: 1;
+    padding: 12px 8px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    border-radius: 12px;
+    border: 1px solid var(--accent);
+    background: #0f2238;
+    color: var(--accent);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: all 0.12s ease;
+}
+
+.btn-jog .btn-icon {
+    width: 38px;
+    height: 38px;
+    stroke: var(--accent);
+    transition: transform 0.12s ease, stroke 0.12s ease;
+}
+
+.btn-jog:active, .btn-jog.active {
+    background: var(--accent);
+    color: #000;
+    box-shadow: 0 0 15px var(--accent-glow);
+    transform: scale(0.96);
+}
+
+.btn-jog:active .btn-icon, .btn-jog.active .btn-icon {
+    stroke: #000;
+    transform: scale(1.08);
+}
+
+.jog-sub {
+    font-size: 0.62rem;
+    font-weight: 600;
+    opacity: 0.8;
+}
+
+/* CONTROL ROW (CLAW) */
 .control-row {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin: 10px 0;
+    margin: 8px 0;
 }
 
 .arrow-btn {
@@ -480,7 +657,7 @@ input[type=range] {
     border-radius: 5px;
     background: #0d1322;
     outline: none;
-    margin: 12px 0;
+    margin: 10px 0;
 }
 
 input[type=range]::-webkit-slider-thumb {
@@ -532,8 +709,8 @@ input[type=range]::-moz-range-thumb {
 
 .btn-action {
     flex: 1;
-    padding: 9px 0;
-    font-size: 0.8rem;
+    padding: 8px 0;
+    font-size: 0.76rem;
     font-weight: 700;
     border-radius: 8px;
     border: none;
@@ -558,55 +735,16 @@ input[type=range]::-moz-range-thumb {
     border: 1px solid #ff9100;
 }
 
-.btn-stop-base {
-    background: #4a1220;
-    color: #ff8a80;
-    border: 1px solid var(--red);
-}
-
-/* GLOBAL CONTROL GRID */
-.global-controls {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-top: 10px;
-}
-
-.btn-global {
-    padding: 12px;
-    font-size: 0.85rem;
-    font-weight: 800;
-    border-radius: 12px;
-    border: none;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.btn-reset {
-    background: #1e2840;
-    color: var(--accent);
-    border: 1px solid var(--card-border);
-}
-
-.btn-stop-all {
-    background: var(--red);
-    color: #fff;
-}
-
 /* PRESET PANEL */
 .preset-panel {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 6px;
-    margin-top: 10px;
+    margin-top: 6px;
+    margin-bottom: 8px;
 }
 
 .btn-preset {
-    flex: 1;
     padding: 8px 4px;
     background: #131a2b;
     border: 1px solid var(--card-border);
@@ -623,106 +761,65 @@ input[type=range]::-moz-range-thumb {
     color: #000;
 }
 
-/* CONTINUOUS SERVO JOG CONTROLS */
-.jog-row {
-    display: flex;
-    gap: 10px;
-    margin: 10px 0;
+/* GLOBAL RESET BUTTON */
+.global-controls {
+    margin-top: 4px;
 }
 
-.btn-jog {
-    flex: 1;
-    padding: 14px 10px;
-    font-size: 0.88rem;
+.btn-global {
+    width: 100%;
+    padding: 12px;
+    font-size: 0.85rem;
     font-weight: 800;
     border-radius: 12px;
-    border: 1px solid var(--accent);
-    background: #0f2238;
-    color: var(--accent);
     cursor: pointer;
-    user-select: none;
-    -webkit-user-select: none;
-    touch-action: manipulation;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    transition: all 0.12s ease;
+    gap: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-.btn-jog:active, .btn-jog.active {
+.btn-reset {
+    background: #1e2840;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    box-shadow: 0 0 10px rgba(0, 217, 255, 0.15);
+}
+
+.btn-reset:active {
     background: var(--accent);
     color: #000;
-    box-shadow: 0 0 15px var(--accent-glow);
-    transform: scale(0.96);
 }
 
-.jog-sub {
-    font-size: 0.65rem;
-    font-weight: 600;
-    opacity: 0.85;
-}
-
-.speed-row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-top: 8px;
-    padding-top: 6px;
-    border-top: 1px dashed rgba(255, 255, 255, 0.08);
-}
-
-.speed-label {
-    font-size: 0.72rem;
-    color: var(--subtext);
-    font-weight: 700;
-}
-
-.btn-speed {
-    flex: 1;
-    padding: 5px 0;
-    font-size: 0.72rem;
-    font-weight: 700;
-    border-radius: 6px;
-    background: #101626;
-    border: 1px solid var(--card-border);
-    color: var(--subtext);
-    cursor: pointer;
-    transition: all 0.15s ease;
-}
-
-.btn-speed.active {
-    background: #183a60;
-    border-color: var(--accent);
-    color: var(--accent);
-    box-shadow: 0 0 6px var(--accent-glow);
-}
-
-/* MOBILE RESPONSIVENESS */
-@media (max-width: 420px) {
-    .preset-panel {
-        flex-wrap: wrap;
+/* RESPONSIVE LAYOUT FOR MOBILE */
+@media (max-width: 860px) {
+    body {
+        padding: 10px;
     }
 
-    .btn-preset {
-        flex: 1 1 45%;
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
     }
 
-    .joint-name {
-        font-size: 0.85rem;
+    .app-layout {
+        flex-direction: column-reverse;
     }
 
-    .angle-badge {
-        font-size: 1rem;
+    .controls-panel {
+        flex: 1 1 auto;
+        max-width: 100%;
     }
 
-    .action-row {
-        gap: 4px;
+    .visualizer-card {
+        min-height: 320px;
     }
 
-    .btn-step {
-        font-size: 0.65rem;
+    .svg-container {
+        min-height: 260px;
     }
 }
 
@@ -787,11 +884,11 @@ const visualState = {
 let animFrameId = null;
 
 function renderVisualizer(s1, s2, s3, s4) {
-    const bx = 160;
-    const by = 176;
-    const L1 = 60;
-    const L2 = 50;
-    const CLAW_LEN = 16;
+    const bx = 170;
+    const by = 190;
+    const L1 = 66;
+    const L2 = 56;
+    const CLAW_LEN = 18;
     const LEAN_DEG = -10;       // Exactly matches Python ArmVisualizer.LEAN_DEG = -10
     const ELBOW_BEND_DEG = 20;  // Matches Python ArmVisualizer.ELBOW_BEND_DEG = 20
 
@@ -802,9 +899,8 @@ function renderVisualizer(s1, s2, s3, s4) {
     // Matches Python ArmVisualizer: (180 - claw_val) * 0.144
     const claw_spread = Math.max(2, Math.min(26, (180 - s3) * 0.144));
 
-    // Upper arm kinematics (Shoulder)
-    // Python formula: -80 + LEAN_DEG + shoulder_deg (-90° + shoulder_deg)
-    const rad_s = (-80 + LEAN_DEG + shoulder_deg) * Math.PI / 180;
+    // Upper arm kinematics (Shoulder: -shoulder_deg raises arm UP when value increases)
+    const rad_s = (-80 + LEAN_DEG - shoulder_deg) * Math.PI / 180;
     const ex = bx + L1 * Math.cos(rad_s);
     const ey = by + L1 * Math.sin(rad_s);
 
@@ -1019,29 +1115,13 @@ function stopJointHold() {
 }
 
 // ==========================================
-// BASE CONTINUOUS JOG & STEP CONTROLS
+// BASE CONTINUOUS JOG CONTROLS
 // ==========================================
 
-let currentJogSpeed = 200;
+let currentJogSpeed = 260;
 let jogKeepAliveTimer = null;
 let baseJogInterval = null;
 let activeJogDir = 0;
-
-function setJogSpeed(spd) {
-    currentJogSpeed = spd;
-    ['spd-slow', 'spd-norm', 'spd-fast'].forEach(id => {
-        const btn = document.getElementById(id);
-        if (btn) btn.classList.remove('active');
-    });
-
-    if (spd <= 140) {
-        document.getElementById('spd-slow')?.classList.add('active');
-    } else if (spd >= 300) {
-        document.getElementById('spd-fast')?.classList.add('active');
-    } else {
-        document.getElementById('spd-norm')?.classList.add('active');
-    }
-}
 
 function updateBaseBadge(text, isMoving = false) {
     const badge = document.getElementById('val4');
@@ -1103,27 +1183,6 @@ function stopJog() {
     fetch('/api/jog?dir=STOP')
         .then(res => { if (res.ok) setConnected(true); })
         .catch(e => { console.warn(e); setConnected(false); });
-}
-
-function nudgeBase(dir, ms) {
-    const dirStr = (dir > 0) ? 'CW' : 'CCW';
-    const angleDelta = (ms >= 150 ? 14 : 6) * (dir > 0 ? 1 : -1);
-    state[4] = ((state[4] + angleDelta + 180) % 360) - 180;
-    updateVisualizer();
-    updateBaseBadge(dir > 0 ? `CW (${ms}ms) ▶` : `◀ CCW (${ms}ms)`, true);
-
-    fetch(`/api/step?dir=${dirStr}&ms=${ms}&speed=${currentJogSpeed}`)
-        .then(res => {
-            if (res.ok) setConnected(true);
-            setTimeout(() => {
-                if (activeJogDir === 0) updateBaseBadge('STOPPED', false);
-            }, ms + 50);
-        })
-        .catch(e => {
-            console.warn(e);
-            setConnected(false);
-            updateBaseBadge('STOPPED', false);
-        });
 }
 
 // ==========================================

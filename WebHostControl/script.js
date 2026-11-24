@@ -56,11 +56,11 @@ const visualState = {
 let animFrameId = null;
 
 function renderVisualizer(s1, s2, s3, s4) {
-    const bx = 160;
-    const by = 176;
-    const L1 = 60;
-    const L2 = 50;
-    const CLAW_LEN = 16;
+    const bx = 170;
+    const by = 190;
+    const L1 = 66;
+    const L2 = 56;
+    const CLAW_LEN = 18;
     const LEAN_DEG = -10;       // Exactly matches Python ArmVisualizer.LEAN_DEG = -10
     const ELBOW_BEND_DEG = 20;  // Matches Python ArmVisualizer.ELBOW_BEND_DEG = 20
 
@@ -71,9 +71,8 @@ function renderVisualizer(s1, s2, s3, s4) {
     // Matches Python ArmVisualizer: (180 - claw_val) * 0.144
     const claw_spread = Math.max(2, Math.min(26, (180 - s3) * 0.144));
 
-    // Upper arm kinematics (Shoulder)
-    // Python formula: -80 + LEAN_DEG + shoulder_deg (-90° + shoulder_deg)
-    const rad_s = (-80 + LEAN_DEG + shoulder_deg) * Math.PI / 180;
+    // Upper arm kinematics (Shoulder: -shoulder_deg raises arm UP when value increases)
+    const rad_s = (-80 + LEAN_DEG - shoulder_deg) * Math.PI / 180;
     const ex = bx + L1 * Math.cos(rad_s);
     const ey = by + L1 * Math.sin(rad_s);
 
@@ -288,29 +287,13 @@ function stopJointHold() {
 }
 
 // ==========================================
-// BASE CONTINUOUS JOG & STEP CONTROLS
+// BASE CONTINUOUS JOG CONTROLS
 // ==========================================
 
-let currentJogSpeed = 200;
+let currentJogSpeed = 260;
 let jogKeepAliveTimer = null;
 let baseJogInterval = null;
 let activeJogDir = 0;
-
-function setJogSpeed(spd) {
-    currentJogSpeed = spd;
-    ['spd-slow', 'spd-norm', 'spd-fast'].forEach(id => {
-        const btn = document.getElementById(id);
-        if (btn) btn.classList.remove('active');
-    });
-
-    if (spd <= 140) {
-        document.getElementById('spd-slow')?.classList.add('active');
-    } else if (spd >= 300) {
-        document.getElementById('spd-fast')?.classList.add('active');
-    } else {
-        document.getElementById('spd-norm')?.classList.add('active');
-    }
-}
 
 function updateBaseBadge(text, isMoving = false) {
     const badge = document.getElementById('val4');
@@ -372,27 +355,6 @@ function stopJog() {
     fetch('/api/jog?dir=STOP')
         .then(res => { if (res.ok) setConnected(true); })
         .catch(e => { console.warn(e); setConnected(false); });
-}
-
-function nudgeBase(dir, ms) {
-    const dirStr = (dir > 0) ? 'CW' : 'CCW';
-    const angleDelta = (ms >= 150 ? 14 : 6) * (dir > 0 ? 1 : -1);
-    state[4] = ((state[4] + angleDelta + 180) % 360) - 180;
-    updateVisualizer();
-    updateBaseBadge(dir > 0 ? `CW (${ms}ms) ▶` : `◀ CCW (${ms}ms)`, true);
-
-    fetch(`/api/step?dir=${dirStr}&ms=${ms}&speed=${currentJogSpeed}`)
-        .then(res => {
-            if (res.ok) setConnected(true);
-            setTimeout(() => {
-                if (activeJogDir === 0) updateBaseBadge('STOPPED', false);
-            }, ms + 50);
-        })
-        .catch(e => {
-            console.warn(e);
-            setConnected(false);
-            updateBaseBadge('STOPPED', false);
-        });
 }
 
 // ==========================================

@@ -1,6 +1,6 @@
 // ============================================================================
 // ESP32 ROBOTIC ARM CONTROLLER (4-DOF Multi-Link Control)
-// Firmware supporting USB Serial, Wi-Fi SoftAP (TCP Socket & Web GUI), and BT SPP
+// Firmware supporting USB Serial and Wi-Fi SoftAP (TCP Socket & Web GUI)
 // ============================================================================
 
 #include <Arduino.h>
@@ -12,18 +12,6 @@
 #include <WebServer.h>
 #include <LittleFS.h>
 #include "web_assets.h" // Embedded PROGMEM web fallbacks
-
-// ============================================================================
-// BLUETOOTH CONFIGURATION
-// ============================================================================
-// Set to 1 to enable Bluetooth Serial SPP (e.g., "ESP32_RoboticArm")
-// Set to 0 if you only want Wi-Fi and USB Serial
-#define ENABLE_BLUETOOTH 1
-
-#if ENABLE_BLUETOOTH
-#include <BluetoothSerial.h>
-BluetoothSerial SerialBT;
-#endif
 
 // ============================================================================
 // WI-FI ACCESS POINT & NETWORK SERVERS
@@ -68,21 +56,27 @@ int pos3 = 90; // Claw
 int pos4 = 90; // Base virtual center
 
 // ============================================================================
-// BASE SERVO (MG90S 360° CONTINUOUS ROTATION) JOG & SPEED CONFIGURATION
+// BASE SERVO (MG90S 360° CONTINUOUS ROTATION) SMOOTH CONTROL CONFIGURATION
 // ============================================================================
 // Neutral stop pulse (microseconds). Tune with CAL4,<us> if motor creeps at idle.
 int baseStopUs = 1500;
 
-// Default jog speed pulse offset from baseStopUs (range: 50 to 450)
-// e.g. 1500 + 200 = 1700us (CW), 1500 - 200 = 1300us (CCW)
-int baseJogSpeedOffset = 200;
+// Default cruising jog speed pulse offset from baseStopUs (range: 150 to 350)
+// 260us provides reliable torque to move the robotic arm without stalling
+int baseJogSpeedOffset = 260;
+
+// Target pulse the motor smoothly ramps towards (1500 = stop)
+int baseTargetUs = 1500;
+
+// Current pulse actively written to the servo (ramps smoothly for soft-start & soft-stop)
+float baseCurrentUs = 1500.0f;
+
+// Acceleration slew rate: ~0.85 us/ms gives a smooth ~250ms ramp up and ramp down (no shaking!)
+const float BASE_ACCEL_RATE = 0.85f;
+unsigned long lastBaseRampTime = 0;
 
 // Current base motor state: 0 = STOPPED, +1 = ROTATING CW, -1 = ROTATING CCW
 int baseState = 0;
-
-// Timed nudge / step state
-bool isBaseStepping = false;
-unsigned long baseStepEndTime = 0;
 
 // Safety timeout: automatically halts continuous rotation if connection drops
 unsigned long baseJogAutoStopTime = 0;
@@ -99,17 +93,11 @@ int serialBufIndex = 0;
 char tcpBuffer[BUFFER_SIZE];
 int tcpBufIndex = 0;
 
-#if ENABLE_BLUETOOTH
-char btBuffer[BUFFER_SIZE];
-int btBufIndex = 0;
-#endif
-
 // ============================================================================
 // FORWARD DECLARATIONS
 // ============================================================================
 void stopBase();
 void jogBase(int direction, int speedOffset = 0);
-void stepBaseTimed(int direction, unsigned long durationMs, int speedOffset = 0);
 void updateBase();
 void testBaseServo(Stream *replyStream);
 void movePositionalServo(Servo &servo, int &currentPosition, int newPosition);
@@ -118,7 +106,6 @@ void checkStreamInput(Stream &stream, char *buffer, int &bufIndex, Stream *reply
 void setupWebServer();
 void handleServeFile(const char* path, const char* contentType, const char* progmemFallback);
 void handleApiJog();
-void handleApiStep();
 void handleApiCal4();
 void handleApiSet();
 void handleApiStatus();
@@ -137,70 +124,63 @@ void movePositionalServo(Servo &servo, int &currentPosition, int newPosition) {
     servo.write(newPosition);
 }
 
-// Holds neutral stop pulse to completely halt the continuous base motor
+// Holds neutral stop pulse to smoothly halt the continuous base motor
 void stopBase() {
-    servo4.writeMicroseconds(baseStopUs);
+    baseTargetUs = baseStopUs;
     baseState = 0;
-    isBaseStepping = false;
-    baseStepEndTime = 0;
     baseJogAutoStopTime = 0;
     pos4 = 90;
 }
 
-// Continuous Jog: direction = +1 (CW), -1 (CCW), 0 (STOP)
+// Continuous Jog with smooth ramping: direction = +1 (CW), -1 (CCW), 0 (STOP)
 void jogBase(int direction, int speedOffset) {
     if (direction == 0) {
         stopBase();
         return;
     }
     if (speedOffset <= 0) speedOffset = baseJogSpeedOffset;
-    speedOffset = constrain(speedOffset, 50, 450);
+    speedOffset = constrain(speedOffset, 150, 350);
 
     baseState = (direction > 0) ? 1 : -1;
-    isBaseStepping = false;
     baseJogAutoStopTime = millis() + BASE_JOG_SAFETY_TIMEOUT_MS;
 
-    int pulse = (direction > 0) ? (baseStopUs + speedOffset) : (baseStopUs - speedOffset);
-    servo4.writeMicroseconds(pulse);
+    baseTargetUs = (direction > 0) ? (baseStopUs + speedOffset) : (baseStopUs - speedOffset);
     pos4 = (direction > 0) ? 135 : 45;
 }
 
-// Timed Nudge / Step: rotates base for durationMs then stops automatically
-void stepBaseTimed(int direction, unsigned long durationMs, int speedOffset) {
-    if (direction == 0 || durationMs == 0) {
-        stopBase();
-        return;
-    }
-    if (speedOffset <= 0) speedOffset = baseJogSpeedOffset;
-    speedOffset = constrain(speedOffset, 50, 450);
-    durationMs = constrain(durationMs, 20, 5000);
-
-    baseState = (direction > 0) ? 1 : -1;
-    isBaseStepping = true;
-    baseStepEndTime = millis() + durationMs;
-    baseJogAutoStopTime = 0;
-
-    int pulse = (direction > 0) ? (baseStopUs + speedOffset) : (baseStopUs - speedOffset);
-    servo4.writeMicroseconds(pulse);
-    pos4 = (direction > 0) ? 135 : 45;
-}
-
-// Background handler for timed steps and safety timeouts
+// Background handler for smooth continuous base acceleration / deceleration and safety timeout
 void updateBase() {
-    if (baseState == 0) return;
-
     unsigned long now = millis();
 
-    // 1. Timed step finished
-    if (isBaseStepping && now >= baseStepEndTime) {
-        stopBase();
-        return;
+    // 1. Smoothly ramp current pulse towards target pulse (eliminates violent startup & stop shake)
+    if (abs(baseCurrentUs - (float)baseTargetUs) > 0.5f) {
+        float dt = (lastBaseRampTime > 0) ? (float)(now - lastBaseRampTime) : 10.0f;
+        if (dt > 50.0f) dt = 50.0f; // Prevent overshooting if loop paused
+        
+        float maxStep = BASE_ACCEL_RATE * dt;
+        if (baseCurrentUs < (float)baseTargetUs) {
+            baseCurrentUs += maxStep;
+            if (baseCurrentUs > (float)baseTargetUs) baseCurrentUs = (float)baseTargetUs;
+        } else {
+            baseCurrentUs -= maxStep;
+            if (baseCurrentUs < (float)baseTargetUs) baseCurrentUs = (float)baseTargetUs;
+        }
+        
+        servo4.writeMicroseconds((int)round(baseCurrentUs));
+    } else {
+        if ((int)round(baseCurrentUs) != baseTargetUs) {
+            baseCurrentUs = (float)baseTargetUs;
+            servo4.writeMicroseconds(baseTargetUs);
+        }
     }
+    lastBaseRampTime = now;
+
+    if (baseState == 0) return;
 
     // 2. Safety timeout for continuous jog (halts runaway rotation if client disconnects)
-    if (!isBaseStepping && baseJogAutoStopTime > 0 && now >= baseJogAutoStopTime) {
+    if (baseJogAutoStopTime > 0 && now >= baseJogAutoStopTime) {
         stopBase();
-        Serial.println("[BASE] Safety timeout reached - Base motor stopped.");
+        Serial.println("[BASE] Safety timeout reached - Base motor smoothly stopped.");
         return;
     }
 }
@@ -212,13 +192,13 @@ void testBaseServo(Stream *replyStream) {
     stopBase();
     delay(200);
 
-    if (replyStream) replyStream->println("[TEST] Rotating Clockwise (CW) for 500ms...");
-    stepBaseTimed(1, 500);
-    delay(700);
+    if (replyStream) replyStream->println("[TEST] Rotating Clockwise (CW)...");
+    jogBase(1, 260);
+    delay(600);
 
-    if (replyStream) replyStream->println("[TEST] Rotating Counter-Clockwise (CCW) for 500ms...");
-    stepBaseTimed(-1, 500);
-    delay(700);
+    if (replyStream) replyStream->println("[TEST] Rotating Counter-Clockwise (CCW)...");
+    jogBase(-1, 260);
+    delay(600);
 
     stopBase();
     if (replyStream) replyStream->println("[TEST] Base Servo Test Complete. GPIO 21 is operational!");
@@ -266,24 +246,6 @@ void processCommand(const char *command, Stream *replyStream) {
         if (us >= 500 && us <= 2500) {
             servo4.writeMicroseconds(us);
             if (replyStream) replyStream->printf("ACK,US4,%d\n", us);
-        }
-        return;
-    }
-
-    // Timed step / nudge command: STEP4,CW,150 or STEP4,CCW,150
-    if (strncmp(command, "STEP4,", 6) == 0) {
-        char dirStr[8] = {0};
-        int durationMs = 150;
-        int parsed = sscanf(command + 6, "%7[^,],%d", dirStr, &durationMs);
-        if (parsed >= 1) {
-            int dir = (strcmp(dirStr, "CW") == 0) ? 1 : ((strcmp(dirStr, "CCW") == 0) ? -1 : 0);
-            if (dir != 0) {
-                stepBaseTimed(dir, durationMs);
-                if (replyStream) replyStream->printf("ACK,STEP4,%s,%d\n", dirStr, durationMs);
-            } else {
-                stopBase();
-                if (replyStream) replyStream->println("ACK,STEP4,STOP");
-            }
         }
         return;
     }
@@ -442,27 +404,6 @@ void handleApiJog() {
     webServer.send(400, "application/json", "{\"error\":\"Missing parameter 'dir'\"}");
 }
 
-// REST API: Timed Nudge / Step
-// GET /api/step?dir=CW&ms=150
-void handleApiStep() {
-    if (webServer.hasArg("dir")) {
-        String dir = webServer.arg("dir");
-        int ms = webServer.hasArg("ms") ? webServer.arg("ms").toInt() : 150;
-        int speed = webServer.hasArg("speed") ? webServer.arg("speed").toInt() : baseJogSpeedOffset;
-        if (dir.equalsIgnoreCase("CW")) {
-            stepBaseTimed(1, ms, speed);
-        } else if (dir.equalsIgnoreCase("CCW")) {
-            stepBaseTimed(-1, ms, speed);
-        } else {
-            stopBase();
-        }
-        char json[96];
-        snprintf(json, sizeof(json), "{\"status\":\"ok\",\"baseState\":%d,\"stepMs\":%d}", baseState, ms);
-        webServer.send(200, "application/json", json);
-        return;
-    }
-    webServer.send(400, "application/json", "{\"error\":\"Missing parameter 'dir'\"}");
-}
 
 // REST API: Tune Stop Pulse
 // GET /api/cal4?us=1500
@@ -590,7 +531,6 @@ void setupWebServer() {
 
     // REST API routes
     webServer.on("/api/jog", HTTP_GET, handleApiJog);
-    webServer.on("/api/step", HTTP_GET, handleApiStep);
     webServer.on("/api/cal4", HTTP_GET, handleApiCal4);
     webServer.on("/api/set", HTTP_GET, handleApiSet);
     webServer.on("/api/status", HTTP_GET, handleApiStatus);
@@ -603,7 +543,7 @@ void setupWebServer() {
 }
 
 // ============================================================================
-// STREAM INPUT READER (USB, TCP, BT)
+// STREAM INPUT READER (USB & TCP)
 // ============================================================================
 
 void checkStreamInput(Stream &stream, char *buffer, int &bufIndex, Stream *replyStream) {
@@ -664,7 +604,7 @@ void setup() {
     Serial.printf("  [S1] Shoulder (GPIO %2d): %s (LEDC Channel %d)\n", SERVO1_PIN, servo1.attached() ? "READY" : "FAILED", ch1);
     Serial.printf("  [S2] Elbow    (GPIO %2d): %s (LEDC Channel %d)\n", SERVO2_PIN, servo2.attached() ? "READY" : "FAILED", ch2);
     Serial.printf("  [S3] Claw     (GPIO %2d): %s (LEDC Channel %d)\n", SERVO3_PIN, servo3.attached() ? "READY" : "FAILED", ch3);
-    Serial.printf("  [S4] Base     (GPIO %2d): %s (LEDC Channel %d) [MG90S 360° Continuous Jog Mode]\n",
+    Serial.printf("  [S4] Base     (GPIO %2d): %s (LEDC Channel %d) [MG90S 360° Smooth Eased Jog Mode]\n",
                   SERVO4_PIN, servo4.attached() ? "READY" : "FAILED", ch4);
 
     if (!servo4.attached()) {
@@ -675,6 +615,9 @@ void setup() {
     servo1.write(pos1);
     servo2.write(pos2);
     servo3.write(pos3);
+    baseCurrentUs = baseStopUs;
+    baseTargetUs = baseStopUs;
+    lastBaseRampTime = millis();
     stopBase();
 
     // 2. Start Wi-Fi Access Point (SoftAP)
@@ -698,18 +641,9 @@ void setup() {
     // 4. Start HTTP Web Server on Port 80 (Mobile & Desktop Browsers)
     setupWebServer();
 
-    // 5. Start Bluetooth Classic SPP (if enabled)
-#if ENABLE_BLUETOOTH
-    if (SerialBT.begin("ESP32_RoboticArm")) {
-        Serial.println("[BT] Bluetooth Classic SPP ready as 'ESP32_RoboticArm'");
-    } else {
-        Serial.println("[BT] Failed to start Bluetooth");
-    }
-#endif
-
     Serial.println("==================================================");
-    Serial.println("  ESP32 READY: USB, WI-FI & BT ACTIVE");
-    Serial.println("  Base Mode: MG90S 360° Continuous (Jog & Timed Nudge)");
+    Serial.println("  ESP32 READY: USB & WI-FI ACTIVE (BLUETOOTH DISABLED)");
+    Serial.println("  Base Mode: MG90S 360° Smooth Continuous Easing");
     Serial.println("  Tip: Send 'TEST4' over Serial to test Base Servo!");
     Serial.println("==================================================");
 }
@@ -719,7 +653,7 @@ void setup() {
 // ============================================================================
 
 void loop() {
-    // 1. Process timed step completion & safety timeout for continuous base motor
+    // 1. Process smooth base motor ramping & safety timeout
     updateBase();
 
     // 2. Handle HTTP Web Server requests (Mobile Web GUI)
@@ -728,12 +662,7 @@ void loop() {
     // 3. Process USB Serial commands (PC connected via USB cable)
     checkStreamInput(Serial, serialBuffer, serialBufIndex, &Serial);
 
-    // 4. Process Bluetooth Serial commands (if enabled)
-#if ENABLE_BLUETOOTH
-    checkStreamInput(SerialBT, btBuffer, btBufIndex, &SerialBT);
-#endif
-
-    // 5. Manage TCP Wi-Fi Client (Desktop Python GUI)
+    // 4. Manage TCP Wi-Fi Client (Desktop Python GUI)
     if (!tcpClient.connected()) {
         if (tcpClient) {
             stopBase();

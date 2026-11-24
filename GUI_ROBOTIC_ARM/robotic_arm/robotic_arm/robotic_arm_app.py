@@ -16,13 +16,13 @@ from servo_easer import ServoEaser
 
 class RoboticArmApp:
     # "RESET ALL JOINTS" moves to this pose (the old fold / rest pose)
-    RESET_POSE = (90, 135, 90, 0)        # shoulder, elbow, claw, base (degrees)
+    RESET_POSE = (90, 90, 90, 0)        # shoulder, elbow, claw, base (degrees)
 
     def __init__(self, root):
         self.root = root
         self.root.title("ESP32 Robotic Arm Control Station")
-        self.root.geometry("1100x760")
-        self.root.minsize(980, 700)
+        self.root.geometry("1280x820")
+        self.root.minsize(1080, 760)
         self.root.configure(bg=BG_DARK)
 
         # Thread-safe UI event queue
@@ -30,7 +30,7 @@ class RoboticArmApp:
         self._suppress = False
 
         # Base rotation jog state
-        self.jog_speed = 200
+        self.jog_speed = 260
         self.active_jog_dir = 0
         self.jog_anim_id = None
         self.jog_keepalive_id = None
@@ -80,17 +80,14 @@ class RoboticArmApp:
             on_set=self.set_joint_val,
             on_jog_base=self.start_jog_base,
             on_stop_base=self.stop_jog_base,
-            on_nudge_base=self.nudge_base,
-            on_speed_change=self.set_base_speed,
         )
-        self.joints_panel.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        self.joints_panel.pack(side="left", fill="y", padx=(0, 10))
 
         self.side_panel = SidePanel(
             main_split, self.state,
             on_reset=self.reset_all_controls,
-            on_stop_base=self.stop_jog_base,
         )
-        self.side_panel.pack(side="right", fill="both")
+        self.side_panel.pack(side="right", fill="both", expand=True)
 
     # ---------- Thread-Safe Helpers ----------
     def _drain_ui_queue(self):
@@ -194,23 +191,6 @@ class RoboticArmApp:
         if self.jog_keepalive_id:
             self.root.after_cancel(self.jog_keepalive_id)
             self.jog_keepalive_id = None
-
-    def nudge_base(self, direction, ms):
-        """Timed nudge / step for precision positioning."""
-        dir_str = "CW" if direction > 0 else "CCW"
-        self.comm.send(f"STEP4,{dir_str},{ms}")
-
-        angle_delta = (14 if ms >= 150 else 6) * (1 if direction > 0 else -1)
-        self.state.set(4, self.state.get(4) + angle_delta)
-        self.joints_panel.update_badge(4, f"{dir_str} ({ms}ms)", is_active=True)
-        self.side_panel.visualizer.redraw()
-
-        self.root.after(ms + 60, lambda: self.joints_panel.update_badge(4, "STOPPED", is_active=False))
-
-    def set_base_speed(self, speed):
-        self.jog_speed = speed
-        self.joints_panel.set_active_speed(speed)
-        self.append_log(f"[BASE] Jog speed offset set to {speed} us.")
 
     # ---------- Global Pose Controls ----------
     def reset_all_controls(self):
